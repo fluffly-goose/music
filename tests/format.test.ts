@@ -142,3 +142,41 @@ describe('pluralize', () => {
     expect(pluralize(3, 'song')).toBe('3 songs');
   });
 });
+
+describe('track artwork resolution', () => {
+  const base = {
+    id: 't1', album_id: 'a1', artist_id: null, title: 'Song', track_no: 1, disc_no: 1,
+    duration_seconds: 100, audio_path: 'p.mp3', mime_type: null, file_size: null,
+    genre: null, year: null, created_at: '',
+  };
+
+  it("prefers a song's own cover over its album's", async () => {
+    const { trackArtwork } = await import('@/lib/library/types');
+    expect(trackArtwork({
+      ...base,
+      cover_path: 'own/cover.jpg',
+      album: { id: 'a1', title: 'Album', cover_path: 'album/cover.jpg', year: null },
+    }).path).toBe('own/cover.jpg');
+  });
+
+  it("falls back to the album's cover when the song has none", async () => {
+    const { trackArtwork } = await import('@/lib/library/types');
+    expect(trackArtwork({
+      ...base,
+      album: { id: 'a1', title: 'Album', cover_path: 'album/cover.jpg', year: null },
+    }).path).toBe('album/cover.jpg');
+  });
+
+  it('yields a placeholder seed when neither exists', async () => {
+    const { trackArtwork } = await import('@/lib/library/types');
+    const art = trackArtwork({ ...base, album: null });
+    expect(art.path).toBeNull();
+    expect(art.seed).toBe('Song');
+  });
+
+  it('treats a missing cover_path column as no cover', async () => {
+    // Databases without 0004 return rows with the field absent entirely.
+    const { trackArtwork } = await import('@/lib/library/types');
+    expect(trackArtwork({ ...base, album: null }).path).toBeNull();
+  });
+});

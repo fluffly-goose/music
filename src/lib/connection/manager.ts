@@ -29,12 +29,26 @@ export type ConnectionStatus =
   | 'needs-auth'     // client is fine, but RLS wants a signed-in user
   | 'error';
 
+/**
+ * Optional schema additions, detected at connect time.
+ *
+ * Migrations ship after people already have a running database, so the app
+ * checks for each addition instead of assuming it. Selecting a column that
+ * does not exist is a hard PostgREST error, which would take the whole
+ * library down rather than degrading.
+ */
+export interface SchemaFeatures {
+  /** tracks.cover_path, added by 0004_track_artwork.sql. */
+  trackCovers: boolean;
+}
+
 export interface ConnectionState {
   status: ConnectionStatus;
   config: ConnectionConfig | null;
   session: Session | null;
   remembered: boolean;
   error: AppError | null;
+  features: SchemaFeatures;
 }
 
 export interface TestResult {
@@ -53,6 +67,7 @@ const initialState: ConnectionState = {
   session: null,
   remembered: false,
   error: null,
+  features: { trackCovers: false },
 };
 
 class ConnectionManager {
@@ -264,8 +279,24 @@ class ConnectionManager {
       error = toAppError(raw, 'Connecting');
     }
 
-    this.store.set({ status, config, session, remembered, error });
+    const features = status === 'error' ? { trackCovers: false } : await this.detectFeatures();
+    this.store.set({ status, config, session, remembered, error, features });
     return this.store.get();
+  }
+
+  /** One cheap request; a missing column simply reads as "not available". */
+  private async detectFeatures(): Promise<SchemaFeatures> {
+    if (!this.client) return { trackCovers: false };
+    try {
+      const { error } = await this.client.from('tracks').select('cover_path').limit(1);
+      return { trackCovers: !error };
+    } catch {
+      return { trackCovers: false };
+    }
+  }
+
+  getFeatures(): SchemaFeatures {
+    return this.store.get().features;
   }
 
   /**

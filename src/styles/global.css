@@ -107,6 +107,9 @@ button, nav, .no-select { user-select: none; -webkit-user-select: none; }
 
 .app-scroll {
   height: 100dvh;
+  /* Every screen scrolls inside this, so the inset belongs here rather than
+     being repeated (and forgotten) on each header. */
+  padding-top: env(safe-area-inset-top);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding-bottom: calc(var(--chrome-height) + 4.25rem);
@@ -183,6 +186,10 @@ button, nav, .no-select { user-select: none; -webkit-user-select: none; }
   transition: border-color 0.15s, background-color 0.15s;
 }
 .field::placeholder { color: var(--subtle); }
+/* `.field` sets padding with a shorthand, and unlayered CSS outranks Tailwind's
+   utilities - so pl-10 was being ignored and the leading icon overlapped the
+   placeholder. This gives the iconned variant its own rule. */
+.field-icon { padding-left: 2.75rem; }
 .field:focus { outline: none; border-color: var(--accent); background: var(--surface-3); }
 .field[aria-invalid='true'] { border-color: #ff5c5c; }
 
@@ -315,6 +322,51 @@ button, nav, .no-select { user-select: none; -webkit-user-select: none; }
   overflow: hidden;
 }
 
+
+/* ===========================================================================
+   Brand + page headers
+   =========================================================================== */
+
+.logo-word {
+  font-weight: 600;
+  /* Tight tracking is what makes a system face read as a wordmark rather than
+     as running text. */
+  letter-spacing: -0.035em;
+  line-height: 1;
+  color: var(--text);
+}
+
+/* One header treatment for every screen, so titles sit in the same place as
+   you move around. The top padding clears the status bar and notch; without
+   the safe-area inset a title sits underneath them on a real iPhone. */
+.page-header {
+  padding-inline: 1rem;
+  padding-top: 1.5rem;
+  padding-bottom: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+/* Unlayered rules outrank Tailwind utilities, so a `block` class cannot undo
+   the flex above - screens that stack their header contents use this instead. */
+.page-header-stack {
+  display: block;
+}
+
+.page-title {
+  font-size: 1.9375rem;
+  font-weight: 700;
+  letter-spacing: -0.032em;
+  line-height: 1.08;
+}
+
+.page-subtitle {
+  font-size: 0.875rem;
+  color: var(--muted);
+  margin-top: 0.375rem;
+}
 
 /* ===========================================================================
    Modal sheets

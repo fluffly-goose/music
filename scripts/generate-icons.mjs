@@ -77,24 +77,48 @@ function roundedRectAlpha(x, y, w, h, radius) {
   return clamp01(0.5 - distance);
 }
 
-/** Coverage of a filled ellipse, antialiased. */
-function ellipseAlpha(x, y, cx, cy, rx, ry, rotation = 0) {
-  const cos = Math.cos(rotation);
-  const sin = Math.sin(rotation);
-  const px = (x - cx) * cos + (y - cy) * sin;
-  const py = -(x - cx) * sin + (y - cy) * cos;
-  const d = Math.hypot(px / rx, py / ry);
-  return clamp01((1 - d) * Math.min(rx, ry) + 0.5);
+/** Coverage of a filled circle, antialiased. */
+function discAlpha(x, y, cx, cy, r) {
+  return clamp01(r - Math.hypot(x - cx, y - cy) + 0.5);
 }
 
-/** Coverage of an axis-aligned rounded bar. */
-function barAlpha(x, y, left, top, w, h, radius) {
-  return roundedRectAlpha(x - left, y - top, w, h, radius);
+/**
+ * Coverage of a stroked arc: a ring of radius `r` and thickness `width`,
+ * drawn only within `span` radians either side of the horizontal axis, on
+ * the left and right. This is the Resonance mark - a point sounding, with the
+ * room answering on both sides.
+ */
+function arcAlpha(x, y, cx, cy, r, width, span) {
+  const dx = x - cx;
+  const dy = y - cy;
+  const ring = Math.abs(Math.hypot(dx, dy) - r);
+  if (ring > width / 2 + 1) return 0;
+
+  const angle = Math.atan2(dy, dx);
+  const onRight = Math.abs(angle) <= span;
+  const onLeft = Math.abs(angle) >= Math.PI - span;
+  if (!onRight && !onLeft) return 0;
+
+  return clamp01(width / 2 - ring + 0.5);
 }
 
-function drawIcon(size) {
+/** The mark, drawn at whatever size, on a 512-unit design grid. */
+function markAlpha(x, y, size) {
+  const s = (v) => (v * size) / 512;
+  const cx = size / 2;
+  const cy = size / 2;
+  const SPAN = 1.14; // radians either side of the horizontal axis
+
+  return Math.max(
+    discAlpha(x, y, cx, cy, s(55)),
+    arcAlpha(x, y, cx, cy, s(144), s(34), SPAN),
+    arcAlpha(x, y, cx, cy, s(224), s(30), SPAN),
+  );
+}
+
+function drawIcon(size, options = {}) {
   const rgba = Buffer.alloc(size * size * 4);
-  const s = (v) => (v * size) / 512; // author at 512 and scale down
+  const s = (v) => (v * size) / 512;
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
@@ -106,27 +130,14 @@ function drawIcon(size) {
       let g = lerp(55, 47, t);
       let b = lerp(95, 247, t);
 
-      // Music note in white, drawn as two note heads, a stem and a beam.
-      const note =
-        Math.max(
-          ellipseAlpha(x, y, s(186), s(356), s(62), s(48), -0.32),
-          ellipseAlpha(x, y, s(338), s(318), s(62), s(48), -0.32),
-          barAlpha(x, y, s(236), s(150), s(26), s(212), s(13)),
-          barAlpha(x, y, s(388), s(112), s(26), s(212), s(13)),
-          // Beam joining the two stems.
-          (() => {
-            const top = s(112) + ((x - s(236)) / (s(414) - s(236))) * s(0);
-            return barAlpha(x, y, s(236), top, s(178), s(54), s(16));
-          })(),
-        );
-
-      if (note > 0) {
-        r = lerp(r, 255, note);
-        g = lerp(g, 255, note);
-        b = lerp(b, 255, note);
+      const mark = markAlpha(x, y, size);
+      if (mark > 0) {
+        r = lerp(r, 255, mark);
+        g = lerp(g, 255, mark);
+        b = lerp(b, 255, mark);
       }
 
-      const alpha = roundedRectAlpha(x, y, size, size, s(114));
+      const alpha = options.square ? 1 : roundedRectAlpha(x, y, size, size, s(114));
 
       rgba[i] = Math.round(r);
       rgba[i + 1] = Math.round(g);
@@ -145,30 +156,5 @@ for (const size of SIZES) {
 }
 
 // Maskable variant: same art, no rounding, so Android can crop it to any shape.
-const maskable = (() => {
-  const size = 512;
-  const rgba = Buffer.alloc(size * size * 4);
-  const base = drawIcon(size);
-  void base;
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const i = (y * size + x) * 4;
-      const t = clamp01((x / size + y / size) / 2);
-      const s = (v) => v;
-      const note = Math.max(
-        ellipseAlpha(x, y, s(186), s(356), s(62), s(48), -0.32),
-        ellipseAlpha(x, y, s(338), s(318), s(62), s(48), -0.32),
-        barAlpha(x, y, s(236), s(150), s(26), s(212), s(13)),
-        barAlpha(x, y, s(388), s(112), s(26), s(212), s(13)),
-        barAlpha(x, y, s(236), s(112), s(178), s(54), s(16)),
-      );
-      rgba[i] = Math.round(lerp(lerp(255, 123, t), 255, note));
-      rgba[i + 1] = Math.round(lerp(lerp(55, 47, t), 255, note));
-      rgba[i + 2] = Math.round(lerp(lerp(95, 247, t), 255, note));
-      rgba[i + 3] = 255;
-    }
-  }
-  return encodePng(size, size, rgba);
-})();
-writeFileSync(join(OUT_DIR, 'icon-maskable-512.png'), maskable);
+writeFileSync(join(OUT_DIR, 'icon-maskable-512.png'), drawIcon(512, { square: true }));
 console.log(`wrote ${join(OUT_DIR, 'icon-maskable-512.png')}`);
