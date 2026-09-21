@@ -27,6 +27,8 @@ Verified working end to end:
 - Queue sheet: listing, jumping, removing
 - Track action sheet, playlist reorder/remove actions
 - Theme switching and preference persistence across reloads
+- Editing songs, albums and artists, including validation, cancelling, artwork
+  replacement under a fresh key, and deletion with storage cleanup
 - Adding music in-app: reading tags in the browser, the review step, uploading
   to Storage under owner-prefixed keys, reusing existing artists and albums,
   and warning about formats Safari cannot play
@@ -90,6 +92,16 @@ Run this on the real device, over HTTPS.
 - [ ] Uploading the same files again reports them as already in the library
 - [ ] Locking the screen mid-upload — does the upload survive or resume?
 - [ ] A large file (30 MB+) uploads without the tab being killed
+
+### Editing
+- [ ] The **…** menu on a song offers *Edit details*
+- [ ] The edit sheet can be dragged down to dismiss
+- [ ] Cancelling discards changes
+- [ ] Renaming a song, album and artist all stick after a reload
+- [ ] Changing album artwork shows the new image (not a cached old one)
+- [ ] The artist sheet warns how many albums and songs a rename affects
+- [ ] Deleting a song removes it and frees the storage file
+- [ ] Editing while signed out is refused with a clear message
 
 ### Playback
 - [ ] Tapping a track starts audio within a second or two

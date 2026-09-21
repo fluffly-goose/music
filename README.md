@@ -148,6 +148,23 @@ It walks the folder recursively and is safe to re-run. Unlike the in-app
 uploader it uses the service-role key, so it runs **on your machine only** —
 which is why `.env` is gitignored and never bundled into the site.
 
+### Fixing details after the fact
+
+Tags are often wrong, and nothing here is permanent:
+
+- **A song** — the **…** menu on any row → *Edit details*. Title, track and
+  disc number, year, genre. Delete removes the row and its audio file.
+- **An album** — the pencil on the album screen. Title, artist, year, genre and
+  the cover art. Typing an artist who does not exist yet creates them; typing
+  an existing one moves the album across.
+- **An artist** — the pencil on the artist screen. Name, biography and photo.
+  Because an artist is one shared record, the sheet says up front how many
+  albums and songs a rename will touch.
+
+New artwork uploads under a fresh object key rather than overwriting the old
+one, so a cached signed URL can never keep serving the previous image; the old
+file is removed afterwards.
+
 ### By hand
 
 Upload files through the Supabase Storage UI following the layout above, then
@@ -181,6 +198,8 @@ src/lib/
 │   └── mediaSession.ts  lock-screen metadata
 ├── state/store.ts     ~40-line observable store
 └── ui/                rendering, bound to the stores above
+    ├── edit-sheet.ts    the modal form sheet every edit flow uses
+    └── edit-actions.ts  track / album / artist edit + delete flows
 ```
 
 A few decisions worth explaining:
@@ -401,6 +420,7 @@ npm test
 | Library | query construction, pagination, error mapping |
 | Import | tag reading, filename fallbacks, de-duplication, rollback, cancellation |
 | Connection status | telling "signed out behind RLS" apart from "an empty library" |
+| Editing | partial patches, clearing fields, duplicate-artist clashes, delete cleanup |
 | Errors | every Supabase failure mode maps to actionable advice |
 
 ### Browser tests
@@ -411,7 +431,7 @@ npm run test:all        # unit -> build -> browser
 
 `tests/e2e/` drives the real built app in headless Chromium at a 393x852
 iPhone viewport against a mocked Supabase project that serves real audio and
-real artwork. 112 checks across six suites:
+real artwork. 144 checks across seven suites:
 
 | Suite | Covers |
 |---|---|
@@ -421,6 +441,7 @@ real artwork. 112 checks across six suites:
 | `gate-fields.mjs` | A restored config repopulates the form; typing survives a failed connect |
 | `upload.mjs` | Picking files, reading tags in-browser, the review step, uploading to Storage, owner-prefixed keys, entity reuse |
 | `signed-out.mjs` | Signed out behind RLS prompts for sign-in; Settings offers it; an anonymously-readable library is not nagged |
+| `editing.mjs` | Editing songs, albums and artists; validation; cancel discards; artwork upload; delete |
 
 Playwright needs a browser once: `npx playwright install chromium`. If your
 environment already ships one, point at it with `PLAYWRIGHT_EXECUTABLE_PATH`.

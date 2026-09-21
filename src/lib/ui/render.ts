@@ -37,14 +37,14 @@ export function trackRow(
 ): string {
   const showArtwork = options.showArtwork ?? options.index === undefined;
   const leading = showArtwork
-    ? `<div class="w-11 h-11 rounded-md overflow-hidden shrink-0">
+    ? `<div class="w-11 h-11 rounded-lg overflow-hidden shrink-0">
          ${artworkImg(track.album?.cover_path ?? null, track.album?.title ?? track.title)}
        </div>`
     : `<div class="w-7 shrink-0 text-center text-[13px] tabular-nums" style="color:var(--subtle)"
          data-track-index>${options.index}</div>`;
 
   return `
-<div class="track-row row-press flex items-center gap-3 px-4 py-2 cursor-pointer"
+<div class="track-row${showArtwork ? '' : ' no-art'} row-press flex items-center gap-3 px-4 py-2 cursor-pointer"
      data-track-id="${escapeHtml(track.id)}"
      ${options.playlistTrackId ? `data-playlist-track-id="${escapeHtml(options.playlistTrackId)}"` : ''}
      role="button" tabindex="0"

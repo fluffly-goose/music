@@ -118,6 +118,8 @@ export async function installMock(page, options = {}) {
   // Records what an import wrote, for assertions.
   const uploaded = options.uploaded ?? [];
   const inserted = options.inserted ?? [];
+  const updated = options.updated ?? [];
+  const deleted = options.deleted ?? [];
 
   await page.route('**/demo.supabase.co/**', async (route) => {
     const url = new URL(route.request().url());
@@ -180,6 +182,15 @@ export async function installMock(page, options = {}) {
       return json(wantsOne ? rows[0] : rows);
     }
     if (['PATCH', 'PUT'].includes(route.request().method())) {
+      updated.push({
+        table,
+        filters: Object.fromEntries(url.searchParams.entries()),
+        patch: route.request().postDataJSON?.() ?? {},
+      });
+      return json([]);
+    }
+    if (route.request().method() === 'DELETE') {
+      deleted.push({ table, filters: Object.fromEntries(url.searchParams.entries()) });
       return json([]);
     }
     const prefer = route.request().headers()['prefer'] ?? '';

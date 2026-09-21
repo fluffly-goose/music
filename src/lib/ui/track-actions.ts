@@ -18,6 +18,8 @@ import { escapeHtml } from '../utils/format';
 export interface TrackListOptions {
   /** The tracks in the order they appear, so tapping row N starts at N. */
   tracks: () => Track[];
+  /** Called after an edit or delete, so the screen can reload. */
+  onChanged?: () => void | Promise<void>;
   /** Extra items for the "…" menu, e.g. "Remove from this playlist". */
   extraActions?: (track: Track, row: HTMLElement) => {
     label: string;
@@ -84,6 +86,15 @@ function showTrackMenu(track: Track, row: HTMLElement, options: TrackListOptions
       onSelect: () => void promptAddToPlaylist(track),
     },
   ];
+
+  actions.push({
+    label: 'Edit details',
+    icon: icons.edit(19),
+    onSelect: async () => {
+      const { editTrack } = await import('./edit-actions');
+      await editTrack(track, options.onChanged);
+    },
+  });
 
   if (track.album_id) {
     actions.push({

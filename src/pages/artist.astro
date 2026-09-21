@@ -17,9 +17,10 @@ import AppLayout from '../layouts/AppLayout.astro';
   } from '../lib/ui/track-actions';
   import { pluralize, escapeHtml } from '../lib/utils/format';
   import { icons } from '../lib/ui/icons';
-  import type { Track } from '../lib/library/types';
+  import type { Artist, Track } from '../lib/library/types';
 
   let tracks: Track[] = [];
+  let artist: Artist | null = null;
 
   async function setup() {
     const root = document.getElementById('artist-root');
@@ -36,11 +37,12 @@ import AppLayout from '../layouts/AppLayout.astro';
         const id = requireQueryId();
         if (!id) return errorState('No artist selected', 'Open an artist from your library.');
 
-        const [artist, albums, artistTracks] = await Promise.all([
+        const [loaded, albums, artistTracks] = await Promise.all([
           library.getArtist(id),
           library.getArtistAlbums(id),
           library.getArtistTracks(id),
         ]);
+        artist = loaded;
         if (!artist) {
           return errorState('Artist not found', 'They may have been removed from your library.');
         }
@@ -52,8 +54,9 @@ import AppLayout from '../layouts/AppLayout.astro';
         ].join(' · ');
 
         return `
-<div class="px-2 pt-2">
-  <button onclick="history.back()" class="tap -ml-1" aria-label="Go back">${icons.back(24)}</button>
+<div class="px-2 pt-2 flex items-center justify-between">
+  <button onclick="history.back()" class="icon-button" aria-label="Go back">${icons.back(24)}</button>
+  <button id="artist-edit" class="icon-button" aria-label="Edit artist">${icons.edit(21)}</button>
 </div>
 ${collectionHeader({
   artPath: artist.image_path,
@@ -91,9 +94,23 @@ ${
 
       bind: (root) => {
         bindPlayAll('artist', () => tracks);
-        bindTrackList(root, { tracks: () => tracks });
+        bindTrackList(root, { tracks: () => tracks, onChanged: refresh });
+
+        document.getElementById('artist-edit')?.addEventListener('click', async () => {
+          if (!artist) return;
+          const { editArtist } = await import('../lib/ui/edit-actions');
+          await editArtist(artist, refresh);
+        });
       },
     });
+  }
+
+  /** Re-runs the page loader so edits show up without a full reload. */
+  async function refresh(): Promise<void> {
+    const root = document.getElementById('artist-root');
+    if (!root) return;
+    delete root.dataset.pageInit;
+    await setup();
   }
 
   setup();

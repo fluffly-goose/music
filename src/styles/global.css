@@ -22,6 +22,8 @@
     system-ui, sans-serif;
 
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Slight overshoot: sheets settle rather than stop dead. */
+  --ease-spring: cubic-bezier(0.32, 1.28, 0.44, 1);
 
   --radius-tile: 0.625rem;
 }
@@ -133,6 +135,18 @@ button, nav, .no-select { user-select: none; -webkit-user-select: none; }
 
 .tile-shadow { box-shadow: 0 8px 24px -8px rgb(0 0 0 / 0.7); }
 
+@media (hover: hover) {
+  .shelf a:hover .tile-shadow,
+  .shelf [data-tile-track]:hover .tile-shadow {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 30px -10px rgb(0 0 0 / 0.8);
+  }
+  .shelf a > div:first-child,
+  .shelf [data-tile-track] > div:first-child {
+    transition: transform 0.22s var(--ease-out-soft), box-shadow 0.22s var(--ease-out-soft);
+  }
+}
+
 .row-press {
   transition: background-color 0.15s var(--ease-out-soft);
 }
@@ -171,6 +185,36 @@ button, nav, .no-select { user-select: none; -webkit-user-select: none; }
 .field::placeholder { color: var(--subtle); }
 .field:focus { outline: none; border-color: var(--accent); background: var(--surface-3); }
 .field[aria-invalid='true'] { border-color: #ff5c5c; }
+
+/* Hairline separators, inset past the leading artwork or index so the list
+   reads as one column of content rather than a stack of loose rows. */
+.track-row { position: relative; }
+.track-row::after {
+  content: '';
+  position: absolute;
+  left: var(--row-inset, 4.25rem);
+  right: 1rem;
+  bottom: 0;
+  height: 1px;
+  background: var(--border);
+}
+.track-row.no-art { --row-inset: 2.9rem; }
+.track-row:last-child::after,
+.playlist-entry:last-child .track-row::after { display: none; }
+
+/* A tappable glyph in a screen header reads better with a surface behind it. */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  transition: background-color 0.15s var(--ease-out-soft), transform 0.15s var(--ease-out-soft);
+}
+.icon-button:active { background: var(--surface-3); transform: scale(0.94); }
 
 /* Marks the row that is currently playing. */
 .is-playing-row { color: var(--accent); }
@@ -270,6 +314,220 @@ button, nav, .no-select { user-select: none; -webkit-user-select: none; }
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+
+/* ===========================================================================
+   Modal sheets
+   A single presentation used by the action menu and every edit form: a
+   blurred scrim, a rounded panel that rises from the bottom, and a grab
+   handle so it reads as draggable before you touch it.
+   =========================================================================== */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 75;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.modal[hidden] { display: none; }
+
+.modal-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 0.55);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  opacity: 0;
+  transition: opacity 0.28s var(--ease-out-soft);
+}
+.modal.is-open .modal-scrim { opacity: 1; }
+
+.modal-panel {
+  position: relative;
+  width: 100%;
+  max-width: 34rem;
+  max-height: 92dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 1.5rem 1.5rem 0 0;
+  box-shadow: 0 -12px 48px -12px rgb(0 0 0 / 0.75);
+  transform: translateY(101%);
+  transition: transform 0.36s var(--ease-spring);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.modal.is-open .modal-panel { transform: translateY(0); }
+
+/* The grab handle. Purely decorative, so it is hidden from assistive tech. */
+.modal-grip {
+  width: 2.25rem;
+  height: 0.25rem;
+  border-radius: 999px;
+  background: var(--surface-3);
+  margin: 0.625rem auto 0;
+  flex-shrink: 0;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem 0.75rem;
+  flex-shrink: 0;
+}
+.modal-title {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.modal-body {
+  overflow-y: auto;
+  padding: 0 1rem 1rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ===========================================================================
+   Grouped forms
+   Rows share one rounded container with hairline separators, so a form reads
+   as a single object rather than a stack of loose inputs.
+   =========================================================================== */
+
+.form-group {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+  overflow: hidden;
+}
+.form-group + .form-group { margin-top: 0.875rem; }
+
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.875rem;
+  min-height: 3rem;
+}
+.form-row + .form-row { border-top: 1px solid var(--border); }
+
+.form-label {
+  flex-shrink: 0;
+  width: 5.5rem;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+/* Bare input: the group supplies the chrome, so the field itself has none. */
+.form-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  /* 16px minimum or iOS Safari zooms on focus. */
+  font-size: 16px;
+  padding: 0.375rem 0;
+}
+.form-input::placeholder { color: var(--subtle); }
+.form-input:focus { outline: none; }
+.form-row:focus-within { background: var(--surface-3); }
+
+textarea.form-input {
+  resize: none;
+  line-height: 1.45;
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+}
+
+.form-hint {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--subtle);
+  padding: 0.5rem 0.25rem 0;
+}
+.form-error {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--accent);
+  padding: 0.5rem 0.25rem 0;
+}
+
+/* Destructive actions sit apart from the rest of the form. */
+.btn-danger {
+  width: 100%;
+  border-radius: 0.875rem;
+  padding: 0.8125rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  transition: background-color 0.15s var(--ease-out-soft);
+}
+.btn-danger:active { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+
+/* Action menu rows. */
+.action-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.875rem;
+  border-radius: 0.75rem;
+  font-size: 1rem;
+  text-align: left;
+  transition: background-color 0.15s var(--ease-out-soft);
+}
+.action-row:active { background: var(--surface-3); }
+
+/* Editable artwork: a hover/press affordance over the image itself. */
+.art-edit {
+  position: relative;
+  display: block;
+  overflow: hidden;
+}
+.art-edit::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 0.45);
+  opacity: 0;
+  transition: opacity 0.2s var(--ease-out-soft);
+}
+.art-edit:active::after { opacity: 1; }
+.art-edit-badge {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3125rem 0.625rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #fff;
+  background: rgb(0 0 0 / 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* Spinner for in-flight saves. */
+.spinner {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* Astro view transitions: cross-fade the main region only, so the persistent
    player chrome does not flicker between screens. */

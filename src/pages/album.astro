@@ -15,9 +15,10 @@ import AppLayout from '../layouts/AppLayout.astro';
   } from '../lib/ui/track-actions';
   import { formatTotalDuration, pluralize } from '../lib/utils/format';
   import { icons } from '../lib/ui/icons';
-  import type { Track } from '../lib/library/types';
+  import type { Album, Track } from '../lib/library/types';
 
   let tracks: Track[] = [];
+  let album: Album | null = null;
 
   async function setup() {
     const root = document.getElementById('album-root');
@@ -35,10 +36,11 @@ import AppLayout from '../layouts/AppLayout.astro';
         const id = requireQueryId();
         if (!id) return errorState('No album selected', 'Open an album from your library.');
 
-        const [album, albumTracks] = await Promise.all([
+        const [loaded, albumTracks] = await Promise.all([
           library.getAlbum(id),
           library.getAlbumTracks(id),
         ]);
+        album = loaded;
         if (!album) {
           return errorState('Album not found', 'It may have been removed from your library.');
         }
@@ -52,7 +54,7 @@ import AppLayout from '../layouts/AppLayout.astro';
         ].filter(Boolean).join(' · ');
 
         return `
-${backButton()}
+${headerBar()}
 ${collectionHeader({
   artPath: album.cover_path,
   seed: album.title,
@@ -73,16 +75,38 @@ ${albumTracks.length ? playAllButtons('album') : ''}
 
       bind: (root) => {
         bindPlayAll('album', () => tracks);
-        bindTrackList(root, { tracks: () => tracks });
+        bindTrackList(root, { tracks: () => tracks, onChanged: refresh });
+
+        document.getElementById('album-edit')?.addEventListener('click', async () => {
+          if (!album) return;
+          const { editAlbum } = await import('../lib/ui/edit-actions');
+          await editAlbum(album, async () => {
+            // A deleted album has nowhere to go back to.
+            if (!(await library.getAlbum(album!.id))) {
+              window.location.href = '/library?tab=albums';
+              return;
+            }
+            await refresh();
+          });
+        });
       },
     });
   }
 
-  function backButton(): string {
+  function headerBar(): string {
     return `
-<div class="px-2 pt-2">
-  <button onclick="history.back()" class="tap -ml-1" aria-label="Go back">${icons.back(24)}</button>
+<div class="px-2 pt-2 flex items-center justify-between">
+  <button onclick="history.back()" class="icon-button" aria-label="Go back">${icons.back(24)}</button>
+  <button id="album-edit" class="icon-button" aria-label="Edit album">${icons.edit(21)}</button>
 </div>`;
+  }
+
+  /** Re-runs the page loader so edits show up without a full reload. */
+  async function refresh(): Promise<void> {
+    const root = document.getElementById('album-root');
+    if (!root) return;
+    delete root.dataset.pageInit;
+    await setup();
   }
 
   setup();

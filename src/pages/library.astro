@@ -113,14 +113,14 @@ import AppLayout from '../layouts/AppLayout.astro';
       root,
       skeleton: `<header class="px-4 pt-5 pb-3 flex items-center justify-between">
                    <h1 class="text-[30px] font-bold tracking-tight">Library</h1>
-                   <a href="/upload" class="tap -mr-2" aria-label="Add music" style="color:var(--accent)">${icons.plus(26)}</a>
+                   <a href="/upload" class="icon-button" aria-label="Add music" style="color:var(--accent)">${icons.plus(20)}</a>
                  </header>
                  ${tabBar(tab)}${skeletonRows(8)}`,
       load: async () => `
         <header class="px-4 pt-5 pb-3 flex items-center justify-between">
           <h1 class="text-[30px] font-bold tracking-tight">Library</h1>
-          <a href="/upload" class="tap -mr-2" aria-label="Add music" style="color:var(--accent)">
-            ${icons.plus(26)}
+          <a href="/upload" class="icon-button" aria-label="Add music" style="color:var(--accent)">
+            ${icons.plus(20)}
           </a>
         </header>
         ${tabBar(tab)}
@@ -153,7 +153,15 @@ import AppLayout from '../layouts/AppLayout.astro';
           }
         });
 
-        bindTrackList(root, { tracks: () => songs });
+        bindTrackList(root, {
+          tracks: () => songs,
+          onChanged: async () => {
+            const root = document.getElementById('library-root');
+            if (!root) return;
+            delete root.dataset.pageInit;
+            await setup();
+          },
+        });
 
         // Pagination for large libraries.
         root.addEventListener('click', async (e) => {

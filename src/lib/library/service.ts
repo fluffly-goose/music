@@ -609,6 +609,131 @@ class MusicLibraryService {
   }
 
   // -------------------------------------------------------------------------
+  // Editing
+  //
+  // Patches are partial on purpose: a screen sends only the fields its form
+  // actually touched, so two people editing different fields of the same album
+  // do not clobber each other.
+  // -------------------------------------------------------------------------
+
+  async updateTrack(
+    id: string,
+    patch: {
+      title?: string;
+      track_no?: number | null;
+      disc_no?: number | null;
+      year?: number | null;
+      genre?: string | null;
+    },
+  ): Promise<void> {
+    try {
+      const { error } = await this.client.from('tracks').update(patch).eq('id', id);
+      if (error) throw error;
+    } catch (raw) {
+      throw toAppError(raw, 'Saving track details');
+    }
+  }
+
+  async updateAlbum(
+    id: string,
+    patch: {
+      title?: string;
+      artist_id?: string | null;
+      year?: number | null;
+      genre?: string | null;
+      cover_path?: string | null;
+    },
+  ): Promise<void> {
+    try {
+      const { error } = await this.client.from('albums').update(patch).eq('id', id);
+      if (error) throw error;
+    } catch (raw) {
+      throw toAppError(raw, 'Saving album details');
+    }
+  }
+
+  async updateArtist(
+    id: string,
+    patch: { name?: string; bio?: string | null; image_path?: string | null },
+  ): Promise<void> {
+    try {
+      const { error } = await this.client.from('artists').update(patch).eq('id', id);
+      if (error) throw error;
+    } catch (raw) {
+      // The schema has unique (owner_id, name), so a clash is a real outcome
+      // worth naming rather than a generic failure.
+      const mapped = toAppError(raw, 'Saving artist details');
+      if (/duplicate key|unique constraint/i.test(mapped.userMessage)) {
+        throw new AppError('unknown', 'You already have an artist with that name.', {
+          hint: 'Pick a different name, or rename the other artist first.',
+          cause: raw,
+        });
+      }
+      throw mapped;
+    }
+  }
+
+  /** Every stored object belonging to a track, for cleanup on delete. */
+  async getTrackAudioPath(id: string): Promise<string | null> {
+    try {
+      const { data, error } = await this.client
+        .from('tracks')
+        .select('audio_path')
+        .eq('id', id)
+        .maybeSingle();
+      if (error) throw error;
+      return (data?.audio_path as string | undefined) ?? null;
+    } catch (raw) {
+      throw toAppError(raw, 'Loading track');
+    }
+  }
+
+  async getAlbumAudioPaths(albumId: string): Promise<string[]> {
+    try {
+      const { data, error } = await this.client
+        .from('tracks')
+        .select('audio_path')
+        .eq('album_id', albumId);
+      if (error) throw error;
+      return ((data ?? []) as { audio_path: string }[]).map((r) => r.audio_path).filter(Boolean);
+    } catch (raw) {
+      throw toAppError(raw, 'Loading album tracks');
+    }
+  }
+
+  async deleteTrack(id: string): Promise<void> {
+    try {
+      const { error } = await this.client.from('tracks').delete().eq('id', id);
+      if (error) throw error;
+    } catch (raw) {
+      throw toAppError(raw, 'Deleting track');
+    }
+  }
+
+  /** Tracks cascade in SQL; Storage objects are the caller's to clean up. */
+  async deleteAlbum(id: string): Promise<void> {
+    try {
+      const { error } = await this.client.from('albums').delete().eq('id', id);
+      if (error) throw error;
+    } catch (raw) {
+      throw toAppError(raw, 'Deleting album');
+    }
+  }
+
+  /** How much an artist rename will affect, so the UI can say so up front. */
+  async getArtistUsage(artistId: string): Promise<{ albums: number; tracks: number }> {
+    try {
+      const [albums, tracks] = await Promise.all([
+        this.client.from('albums').select('id', { count: 'exact', head: true }).eq('artist_id', artistId),
+        this.client.from('tracks').select('id', { count: 'exact', head: true }).eq('artist_id', artistId),
+      ]);
+      return { albums: albums.count ?? 0, tracks: tracks.count ?? 0 };
+    } catch {
+      return { albums: 0, tracks: 0 };
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Preferences
   // -------------------------------------------------------------------------
 

@@ -100,7 +100,10 @@ import AppLayout from '../layouts/AppLayout.astro';
       if (e.key === 'Enter') { e.preventDefault(); input.blur(); void run(input.value); }
     });
 
-    bindTrackList(output, { tracks: () => results });
+    bindTrackList(output, {
+      tracks: () => results,
+      onChanged: () => run(input.value),
+    });
   }
 
   setup();

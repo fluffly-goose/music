@@ -81,6 +81,29 @@ export async function uploadObject(
 }
 
 /**
+ * Removes every object under a prefix, e.g. one album's folder.
+ *
+ * Storage has no recursive delete, so this lists and removes explicitly.
+ * Best-effort: a failure here leaves files behind but must never block the
+ * database change the caller already made.
+ */
+export async function removeFolder(prefix: string): Promise<void> {
+  const client = connection.getClient();
+  if (!client) return;
+  const bucket = connection.getBucket();
+  try {
+    const { data, error } = await client.storage.from(bucket).list(prefix, { limit: 1000 });
+    if (error || !data?.length) return;
+    const keys = data
+      .filter((entry) => entry.name && entry.id !== null) // skip nested folders
+      .map((entry) => `${prefix}/${entry.name}`);
+    if (keys.length) await client.storage.from(bucket).remove(keys);
+  } catch (error) {
+    console.warn('[storage] could not clean up folder', prefix, error);
+  }
+}
+
+/**
  * Best-effort delete, used to roll back an uploaded file when the database row
  * that should point at it could not be written. Without this a failed import
  * would silently leave orphaned audio in the bucket.
@@ -92,5 +115,16 @@ export async function removeObject(path: string): Promise<void> {
     await client.storage.from(connection.getBucket()).remove([path]);
   } catch (error) {
     console.warn('[storage] could not clean up', path, error);
+  }
+}
+
+/** Best-effort bulk delete. */
+export async function removeObjects(paths: string[]): Promise<void> {
+  const client = connection.getClient();
+  if (!client || paths.length === 0) return;
+  try {
+    await client.storage.from(connection.getBucket()).remove(paths);
+  } catch (error) {
+    console.warn('[storage] could not clean up objects', error);
   }
 }

@@ -101,6 +101,7 @@ ${entries.length ? playAllButtons('playlist') : ''}
 
         bindTrackList(root, {
           tracks,
+          onChanged: refreshList,
           // Playlist rows get two extra actions the rest of the app does not have.
           extraActions: (_track, row) => {
             const entryId = row.closest<HTMLElement>('[data-entry-id]')?.dataset.entryId;

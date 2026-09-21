@@ -110,7 +110,13 @@ import AppLayout from '../layouts/AppLayout.astro';
           const index = recentTracks.findIndex((t) => t.id === tile.dataset.trackId);
           if (index >= 0) void player.playTracks(recentTracks, { startIndex: index });
         });
-        bindTrackList(root, { tracks: () => recentTracks });
+        bindTrackList(root, {
+          tracks: () => recentTracks,
+          onChanged: async () => {
+            delete root.dataset.pageInit;
+            await setup();
+          },
+        });
       },
     });
   }

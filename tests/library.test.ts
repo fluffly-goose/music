@@ -228,6 +228,64 @@ describe('playlists', () => {
   });
 });
 
+describe('editing', () => {
+  it('patches only the fields a form touched', async () => {
+    responder = () => ({ data: null, error: null });
+    await library.updateTrack('t1', { title: 'New Title', track_no: 3 });
+    const update = queries[0]!.ops.find((o) => o[0] === 'update')!;
+    expect(update[1]).toEqual({ title: 'New Title', track_no: 3 });
+    expect(queries[0]!.ops).toContainEqual(['eq', 'id', 't1']);
+  });
+
+  it('can clear a field by patching it to null', async () => {
+    responder = () => ({ data: null, error: null });
+    await library.updateTrack('t1', { genre: null, year: null });
+    const update = queries[0]!.ops.find((o) => o[0] === 'update')!;
+    expect(update[1]).toEqual({ genre: null, year: null });
+  });
+
+  it('moves an album to a different artist', async () => {
+    responder = () => ({ data: null, error: null });
+    await library.updateAlbum('a1', { artist_id: 'ar9' });
+    expect(queries[0]!.ops.find((o) => o[0] === 'update')![1]).toEqual({ artist_id: 'ar9' });
+  });
+
+  it('names a duplicate artist clash rather than failing generically', async () => {
+    // The schema has unique (owner_id, name), so this is a real outcome.
+    responder = () => ({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } });
+    await expect(library.updateArtist('ar1', { name: 'Taken' })).rejects.toMatchObject({
+      userMessage: expect.stringMatching(/already have an artist with that name/i),
+    });
+  });
+
+  it('collects a track audio path before deleting, so the file can be cleaned up', async () => {
+    responder = () => ({ data: { audio_path: 'owner/albums/a1/01-x.mp3' }, error: null });
+    expect(await library.getTrackAudioPath('t1')).toBe('owner/albums/a1/01-x.mp3');
+  });
+
+  it('collects every audio path in an album', async () => {
+    responder = () => ({ data: [{ audio_path: 'p1' }, { audio_path: 'p2' }], error: null });
+    expect(await library.getAlbumAudioPaths('a1')).toEqual(['p1', 'p2']);
+  });
+
+  it('deletes a track by id', async () => {
+    responder = () => ({ data: null, error: null });
+    await library.deleteTrack('t1');
+    expect(queries[0]!.ops).toContainEqual(['delete']);
+    expect(queries[0]!.ops).toContainEqual(['eq', 'id', 't1']);
+  });
+
+  it('reports how much an artist rename will affect', async () => {
+    responder = (q) => ({ data: [], error: null, count: q.table === 'albums' ? 2 : 9 });
+    expect(await library.getArtistUsage('ar1')).toEqual({ albums: 2, tracks: 9 });
+  });
+
+  it('surfaces an RLS refusal when editing someone else\'s row', async () => {
+    responder = () => ({ data: null, error: { code: '42501', message: 'permission denied' } });
+    await expect(library.updateAlbum('a1', { title: 'x' })).rejects.toMatchObject({ kind: 'forbidden' });
+  });
+});
+
 describe('error surfacing', () => {
   it('turns a missing table into actionable setup advice', async () => {
     responder = () => ({ data: null, error: { code: '42P01', message: 'relation "tracks" does not exist' } });

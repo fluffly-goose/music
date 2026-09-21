@@ -157,11 +157,7 @@ import { icons } from '../lib/ui/icons';
 </section>
 
 <!-- Bottom sheet for per-track actions (play next, add to playlist, ...) -->
-<div id="action-sheet" transition:persist class="fixed inset-0 z-[65] hidden" role="dialog" aria-modal="true">
-  <div id="action-backdrop" class="absolute inset-0" style="background: rgb(0 0 0 / .6)"></div>
-  <div
-    id="action-panel"
-    class="absolute inset-x-0 bottom-0 rounded-t-2xl safe-bottom p-2 transition-transform duration-300 translate-y-full"
-    style="background: var(--surface-2)"
-  ></div>
+<div id="action-sheet" transition:persist class="modal" role="dialog" aria-modal="true" hidden>
+  <div id="action-backdrop" class="modal-scrim"></div>
+  <div id="action-panel" class="modal-panel px-2 pb-2"></div>
 </div>

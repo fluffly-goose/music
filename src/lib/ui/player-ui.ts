@@ -259,31 +259,32 @@ export function openActionSheet(title: string, items: ActionItem[]): void {
 
   actionHandlers = items;
   panel.innerHTML = `
-<div class="px-4 pt-3 pb-2 text-[13px] font-medium truncate" style="color:var(--muted)">
+<div class="modal-grip" aria-hidden="true"></div>
+<div class="px-3 pt-2.5 pb-1.5 text-[13px] font-medium truncate" style="color:var(--muted)">
   ${escapeHtml(title)}
 </div>
 ${items
   .map(
     (item, i) => `
-<button class="w-full flex items-center gap-3 px-4 py-3.5 text-left text-[16px] rounded-xl row-press"
-        data-action-index="${i}" style="${item.destructive ? 'color:var(--accent)' : ''}">
-  ${item.icon ? `<span class="shrink-0" style="color:var(--muted)">${item.icon}</span>` : ''}
+<button class="action-row" data-action-index="${i}"
+        style="${item.destructive ? 'color:var(--accent)' : ''}">
+  ${item.icon ? `<span class="shrink-0" style="color:${item.destructive ? 'var(--accent)' : 'var(--muted)'}">${item.icon}</span>` : ''}
   <span>${escapeHtml(item.label)}</span>
 </button>`,
   )
   .join('')}
-<button class="w-full mt-2 py-3.5 text-[16px] font-semibold rounded-xl"
+<button class="w-full mt-1.5 py-3.5 text-[16px] font-semibold rounded-xl"
         style="background:var(--surface-3)" data-action-cancel>Cancel</button>`;
 
-  sheet.classList.remove('hidden');
-  requestAnimationFrame(() => panel.classList.remove('translate-y-full'));
+  sheet.hidden = false;
+  requestAnimationFrame(() => sheet.classList.add('is-open'));
 }
 
 function closeActionSheet(): void {
   const sheet = $('action-sheet');
-  const panel = $('action-panel');
-  panel?.classList.add('translate-y-full');
-  setTimeout(() => sheet?.classList.add('hidden'), 280);
+  if (!sheet) return;
+  sheet.classList.remove('is-open');
+  setTimeout(() => { sheet.hidden = true; }, 340);
 }
 
 function bindActionSheet(): void {
