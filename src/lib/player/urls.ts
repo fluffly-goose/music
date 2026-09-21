@@ -102,10 +102,13 @@ export class SignedUrlCache {
   private async sign(client: SupabaseClient, bucket: string, path: string): Promise<string> {
     const { data, error } = await client.storage.from(bucket).createSignedUrl(path, this.ttl);
     if (error || !data?.signedUrl) {
-      const mapped = toAppError(error ?? new Error('No signed URL returned'), `Signing ${path}`);
+      // No object key in the user-facing message - callers know what they asked
+      // for and can say it in terms the listener recognises. The key goes in
+      // the hint, where it is useful for fixing the problem.
+      const mapped = toAppError(error ?? new Error('No signed URL returned'));
       if (mapped.kind === 'unknown') {
-        throw new AppError('signed-url', `Could not get a playable link for ${path}.`, {
-          hint: 'Check that the file exists in the bucket and that the storage policies allow reading it.',
+        throw new AppError('signed-url', 'Could not get a playable link for that file.', {
+          hint: `Check that "${path}" exists in the bucket and that the storage policies allow reading it.`,
           cause: error,
         });
       }

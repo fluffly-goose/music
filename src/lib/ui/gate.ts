@@ -8,7 +8,7 @@
  */
 
 import { connection } from '../connection/manager';
-import { DEFAULT_BUCKET } from '../connection/config';
+import { DEFAULT_BUCKET, type ConnectionConfig } from '../connection/config';
 import { storageAvailable } from '../connection/storage';
 import { escapeHtml } from '../utils/format';
 import { icons } from './icons';
@@ -22,6 +22,12 @@ const $ = (id: string) => document.getElementById(id);
  * mode and only its error banner is updated afterwards.
  */
 let renderedMode: 'connect' | 'signin' | null = null;
+/**
+ * Set once the user edits the connect form. Until then the fields are still
+ * "ours" to refill - which matters when a remembered connection is restored
+ * after the empty form has already been painted.
+ */
+let formDirty = false;
 
 export function initGate(): void {
   connection.store.subscribe(() => renderGate(), { immediate: true });
@@ -59,11 +65,15 @@ export function renderGate(): void {
   // Same form already on screen: refresh only the error banner, so whatever the
   // user has typed survives a failed connection attempt.
   if (mode === renderedMode && body.firstElementChild) {
-    if (mode === 'connect') updateErrorBanner(state.error?.userMessage, state.error?.hint);
+    if (mode === 'connect') {
+      updateErrorBanner(state.error?.userMessage, state.error?.hint);
+      if (!formDirty) syncFieldsFromConfig(state.config);
+    }
     return;
   }
 
   renderedMode = mode;
+  formDirty = false;
   if (mode === 'signin') {
     body.innerHTML = signInForm();
     bindSignIn();
@@ -71,6 +81,18 @@ export function renderGate(): void {
     body.innerHTML = connectForm(state.error?.userMessage, state.error?.hint);
     bindConnect();
   }
+}
+
+/** Fills the form from a restored config, but never over the user's own typing. */
+function syncFieldsFromConfig(config: ConnectionConfig | null): void {
+  if (!config) return;
+  const set = (id: string, value: string) => {
+    const input = document.getElementById(id) as HTMLInputElement | null;
+    if (input && !input.value) input.value = value;
+  };
+  set('field-url', config.url);
+  set('field-key', config.publishableKey);
+  set('field-bucket', config.bucket);
 }
 
 /** Swaps the banner's contents without touching any input. */
@@ -193,6 +215,8 @@ function showFieldErrors(errors: Record<string, string | undefined>): void {
 function bindConnect(): void {
   const form = $('connect-form') as HTMLFormElement | null;
   if (!form) return;
+
+  form.addEventListener('input', () => { formDirty = true; });
 
   $('btn-test')?.addEventListener('click', async () => {
     const button = $('btn-test') as HTMLButtonElement;

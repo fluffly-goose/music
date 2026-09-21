@@ -414,7 +414,16 @@ export class PlaybackEngine {
       if (options.autoplay) await this.play();
     } catch (raw) {
       if (this.loadToken !== token) return;
-      const error = toAppError(raw, `Loading "${track.title}"`);
+      const mapped = toAppError(raw);
+      // Name the song rather than the object key - the listener picked a track,
+      // not a path.
+      const error =
+        mapped.kind === 'missing-file'
+          ? new AppError('missing-file', `"${track.title}" is missing from storage.`, {
+              hint: mapped.hint,
+              cause: mapped.cause,
+            })
+          : mapped;
       this.store.set({ status: 'error', error });
     }
   }
