@@ -27,6 +27,9 @@ Verified working end to end:
 - Queue sheet: listing, jumping, removing
 - Track action sheet, playlist reorder/remove actions
 - Theme switching and preference persistence across reloads
+- Adding music in-app: reading tags in the browser, the review step, uploading
+  to Storage under owner-prefixed keys, reusing existing artists and albums,
+  and warning about formats Safari cannot play
 
 ### What was NOT verified
 
@@ -38,6 +41,8 @@ Anything that requires real iOS hardware. Specifically:
 - Whether iOS suspends audio after a long idle period
 - Home Screen installation and the standalone launch experience
 - Safe-area insets on a physical notched device
+- The iOS file picker, and whether an upload survives the screen locking or the
+  browser being backgrounded mid-transfer
 
 The Media Session API is wired up and feature-detected, but **no claim is made
 that background playback works on iOS until you confirm it below.**
@@ -68,6 +73,20 @@ Run this on the real device, over HTTPS.
 - [ ] Nothing scrolls horizontally
 - [ ] Artwork is sharp on the Retina display
 - [ ] Album/playlist headers look right on a small screen
+
+### Adding music (from the phone)
+- [ ] **Library → +** opens the Add music screen
+- [ ] Tapping the drop zone opens the iOS file picker
+- [ ] Picking several files at once works
+- [ ] Music saved in Files / iCloud Drive can be selected
+- [ ] Track details and durations appear correctly in the review step
+- [ ] Tracks are grouped under the right albums
+- [ ] Uploading over cellular completes, and progress advances
+- [ ] Uploaded tracks appear in Library straight away
+- [ ] Embedded artwork shows up as the album cover
+- [ ] Uploading the same files again reports them as already in the library
+- [ ] Locking the screen mid-upload — does the upload survive or resume?
+- [ ] A large file (30 MB+) uploads without the tab being killed
 
 ### Playback
 - [ ] Tapping a track starts audio within a second or two

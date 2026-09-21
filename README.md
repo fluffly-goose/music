@@ -45,6 +45,8 @@ On first load you'll get an onboarding screen. Enter your Supabase project URL,
 your **publishable (anon) key**, and your bucket name. Press **Test** to check
 the project before committing, then **Connect**.
 
+Then open **Library → +** and drop some music files in. That's the whole setup.
+
 If you haven't set up Supabase yet, do that first — see below.
 
 ---
@@ -105,26 +107,48 @@ needs a file.
 
 ## Getting music in
 
-### Option A — the import script (recommended)
+### From the app (the normal way)
 
-Reads tags from your local files, uploads the audio and cover art, and creates
-the matching database rows.
+Open **Library → +**, or **Settings → Add music**, and pick some files. No
+terminal, no keys, no setup.
+
+The browser reads each file's tags locally and shows you what it found —
+grouped by album, with durations and any warnings — *before* uploading
+anything. Confirm, and the files go straight from your device to your own
+Supabase Storage.
+
+It handles the tedious parts for you:
+
+- Title, artist, album, track number, year, genre and duration come from the
+  file's tags; anything missing falls back to the filename.
+- Embedded cover art becomes the album artwork.
+- Artists and albums are matched to what you already have instead of being
+  duplicated.
+- Re-uploading the same file is a no-op, so a interrupted batch is safe to
+  repeat.
+- Formats Safari can't play are flagged *before* you spend bandwidth on them.
+
+This needs no special permissions. A signed-in user may already write rows
+where `owner_id = auth.uid()` and objects under their own `<uid>/` prefix —
+that is exactly what the policies in `0002_rls.sql` and `0003_storage.sql`
+allow, and nothing more.
+
+### From the command line (for bulk imports)
+
+The app uploads files you select; for a few hundred albums already sorted into
+folders on disk, the script is less clicking:
 
 ```bash
 cp .env.example .env     # fill in URL, service-role key, your user UUID
-npm run import -- ~/Music/SomeAlbum --dry-run   # preview, writes nothing
-npm run import -- ~/Music/SomeAlbum             # do it
+npm run import -- ~/Music --dry-run   # preview, writes nothing
+npm run import -- ~/Music             # do it
 ```
 
-It reads ID3 / Vorbis / MP4 tags for title, artist, album, track number, year,
-genre and duration, pulls embedded cover art (falling back to `cover.jpg` in the
-folder), and is safe to re-run — already-imported files are skipped rather than
-duplicated.
+It walks the folder recursively and is safe to re-run. Unlike the in-app
+uploader it uses the service-role key, so it runs **on your machine only** —
+which is why `.env` is gitignored and never bundled into the site.
 
-This script runs **on your machine only**. It uses the service-role key, which
-is why `.env` is gitignored and never bundled into the site.
-
-### Option B — by hand
+### By hand
 
 Upload files through the Supabase Storage UI following the layout above, then
 insert rows into `artists`, `albums` and `tracks`. `tracks.audio_path` must
@@ -147,7 +171,9 @@ src/lib/
 ├── library/           the music catalog
 │   ├── types.ts         domain types mirroring the SQL schema
 │   ├── service.ts       every database query lives here
-│   └── artwork.ts       artwork resolution + batched signing
+│   ├── artwork.ts       artwork resolution + batched signing
+│   ├── storage.ts       Storage writes (uploads, cleanup)
+│   └── import.ts        in-browser import: scan tags, then upload
 ├── player/            playback
 │   ├── queue.ts         pure queue model (shuffle/repeat/next/prev)
 │   ├── engine.ts        the single <audio> element and its state
@@ -181,6 +207,17 @@ the song you're actually hearing.
 **Detail pages use query params** (`/album?id=…`), not dynamic routes. The site
 is built statically with no knowledge of any library, so there are no paths to
 pre-render.
+
+**Importing happens in two phases.** `scan()` reads tags locally and uploads
+nothing, so you see what was detected before spending bandwidth; `run()` then
+resolves artists and albums *once* and uploads with bounded concurrency. The
+split also removes a race — several tracks from one album processed in
+parallel would otherwise each try to create that album. Per file the order is
+upload-then-insert, and a failed insert deletes the uploaded object again so a
+broken import cannot leave orphaned audio in the bucket.
+
+**The 1 MB tag parser is loaded on demand.** It only ever runs on the import
+screen, so it is dynamically imported rather than shipped in the main bundle.
 
 ---
 
@@ -287,7 +324,7 @@ Supabase keys.
 | `npm run test:e2e` | Browser suite (needs a build first) |
 | `npm run test:all` | Unit tests, then build, then browser suite |
 | `npm run check` | Astro + TypeScript diagnostics |
-| `npm run import -- <dir>` | Import a music folder |
+| `npm run import -- <dir>` | Bulk-import a music folder from disk |
 | `npm run icons` | Regenerate the PWA icons |
 
 ---
@@ -346,6 +383,7 @@ npm test
 | Connection | validation, privileged-key rejection, persistence, corrupt data |
 | Playback | transitions, auto-advance, URL-failure recovery, history recording |
 | Library | query construction, pagination, error mapping |
+| Import | tag reading, filename fallbacks, de-duplication, rollback, cancellation |
 | Errors | every Supabase failure mode maps to actionable advice |
 
 ### Browser tests
@@ -356,7 +394,7 @@ npm run test:all        # unit -> build -> browser
 
 `tests/e2e/` drives the real built app in headless Chromium at a 393x852
 iPhone viewport against a mocked Supabase project that serves real audio and
-real artwork. 72 checks across four suites:
+real artwork. 98 checks across five suites:
 
 | Suite | Covers |
 |---|---|
@@ -364,6 +402,7 @@ real artwork. 72 checks across four suites:
 | `player.mjs` | Every screen, real playback, seek, auto-advance, queue, expired-URL recovery, audio surviving a four-screen navigation tour |
 | `error-states.mjs` | Missing tables, expired session, empty library, missing audio file, unreachable project |
 | `gate-fields.mjs` | A restored config repopulates the form; typing survives a failed connect |
+| `upload.mjs` | Picking files, reading tags in-browser, the review step, uploading to Storage, owner-prefixed keys, entity reuse |
 
 Playwright needs a browser once: `npx playwright install chromium`. If your
 environment already ships one, point at it with `PLAYWRIGHT_EXECUTABLE_PATH`.

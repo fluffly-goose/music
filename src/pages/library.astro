@@ -58,7 +58,9 @@ import AppLayout from '../layouts/AppLayout.astro';
       offset = page.items.length;
 
       if (!songs.length) {
-        return emptyState('No songs yet', 'Once you import music into Supabase it will show up here.');
+        return emptyState('No songs yet', 'Add music and it will appear here.', {
+          label: 'Add music', href: '/upload',
+        });
       }
       return `
         <div id="song-list">${songs.map((t) => trackRow(t)).join('')}</div>
@@ -67,7 +69,11 @@ import AppLayout from '../layouts/AppLayout.astro';
 
     if (tab === 'albums') {
       const page = await library.getAlbums({ limit: 200 });
-      if (!page.items.length) return emptyState('No albums yet', 'Albums appear here as you add music.');
+      if (!page.items.length) {
+        return emptyState('No albums yet', 'Albums appear here as you add music.', {
+          label: 'Add music', href: '/upload',
+        });
+      }
       return `<div class="grid grid-cols-2 sm:grid-cols-3 gap-4 px-4">
                 ${page.items.map((a) => albumTile(a)).join('')}
               </div>`;
@@ -75,7 +81,11 @@ import AppLayout from '../layouts/AppLayout.astro';
 
     if (tab === 'artists') {
       const page = await library.getArtists({ limit: 200 });
-      if (!page.items.length) return emptyState('No artists yet', 'Artists appear here as you add music.');
+      if (!page.items.length) {
+        return emptyState('No artists yet', 'Artists appear here as you add music.', {
+          label: 'Add music', href: '/upload',
+        });
+      }
       return `<div>${page.items.map(artistRow).join('')}</div>`;
     }
 
@@ -101,11 +111,17 @@ import AppLayout from '../layouts/AppLayout.astro';
 
     await definePage({
       root,
-      skeleton: `<header class="px-4 pt-5 pb-3"><h1 class="text-[30px] font-bold tracking-tight">Library</h1></header>
+      skeleton: `<header class="px-4 pt-5 pb-3 flex items-center justify-between">
+                   <h1 class="text-[30px] font-bold tracking-tight">Library</h1>
+                   <a href="/upload" class="tap -mr-2" aria-label="Add music" style="color:var(--accent)">${icons.plus(26)}</a>
+                 </header>
                  ${tabBar(tab)}${skeletonRows(8)}`,
       load: async () => `
-        <header class="px-4 pt-5 pb-3">
+        <header class="px-4 pt-5 pb-3 flex items-center justify-between">
           <h1 class="text-[30px] font-bold tracking-tight">Library</h1>
+          <a href="/upload" class="tap -mr-2" aria-label="Add music" style="color:var(--accent)">
+            ${icons.plus(26)}
+          </a>
         </header>
         ${tabBar(tab)}
         <div id="tab-content">${await renderTab(tab)}</div>`,

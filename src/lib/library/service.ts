@@ -462,6 +462,153 @@ class MusicLibraryService {
   }
 
   // -------------------------------------------------------------------------
+  // Importing
+  //
+  // These back the in-app upload screen. They are deliberately small
+  // find-or-create primitives rather than one big "import" query, so the
+  // importer can resolve entities once and reuse them across a whole batch.
+  // -------------------------------------------------------------------------
+
+  async findArtistByName(name: string): Promise<Artist | null> {
+    try {
+      const { data, error } = await this.client
+        .from('artists')
+        .select('*')
+        .eq('owner_id', this.ownerId())
+        .eq('name', name)
+        .maybeSingle();
+      if (error) throw error;
+      return (data as unknown as Artist) ?? null;
+    } catch (raw) {
+      throw toAppError(raw, 'Looking up artist');
+    }
+  }
+
+  async createArtist(name: string): Promise<Artist> {
+    try {
+      const { data, error } = await this.client
+        .from('artists')
+        .insert({ owner_id: this.ownerId(), name })
+        .select('*')
+        .single();
+      if (error) throw error;
+      return data as unknown as Artist;
+    } catch (raw) {
+      throw toAppError(raw, `Creating artist "${name}"`);
+    }
+  }
+
+  async findAlbum(title: string, artistId: string | null): Promise<Album | null> {
+    try {
+      let query = this.client
+        .from('albums')
+        .select(ALBUM_COLUMNS)
+        .eq('owner_id', this.ownerId())
+        .eq('title', title);
+      // A null artist_id has to be matched with `is`, not `eq`.
+      query = artistId ? query.eq('artist_id', artistId) : query.is('artist_id', null);
+
+      const { data, error } = await query.maybeSingle();
+      if (error) throw error;
+      return (data as unknown as Album) ?? null;
+    } catch (raw) {
+      throw toAppError(raw, 'Looking up album');
+    }
+  }
+
+  async createAlbum(input: {
+    title: string;
+    artistId: string | null;
+    year?: number | null;
+    genre?: string | null;
+  }): Promise<Album> {
+    try {
+      const { data, error } = await this.client
+        .from('albums')
+        .insert({
+          owner_id: this.ownerId(),
+          title: input.title,
+          artist_id: input.artistId,
+          year: input.year ?? null,
+          genre: input.genre ?? null,
+        })
+        .select(ALBUM_COLUMNS)
+        .single();
+      if (error) throw error;
+      return data as unknown as Album;
+    } catch (raw) {
+      throw toAppError(raw, `Creating album "${input.title}"`);
+    }
+  }
+
+  async setAlbumCover(albumId: string, coverPath: string): Promise<void> {
+    try {
+      const { error } = await this.client
+        .from('albums')
+        .update({ cover_path: coverPath })
+        .eq('id', albumId);
+      if (error) throw error;
+    } catch (raw) {
+      throw toAppError(raw, 'Saving album artwork');
+    }
+  }
+
+  /** Used to skip files that are already in the library. */
+  async trackExistsAtPath(audioPath: string): Promise<boolean> {
+    try {
+      const { data, error } = await this.client
+        .from('tracks')
+        .select('id')
+        .eq('owner_id', this.ownerId())
+        .eq('audio_path', audioPath)
+        .maybeSingle();
+      if (error) throw error;
+      return data != null;
+    } catch (raw) {
+      throw toAppError(raw, 'Checking for an existing track');
+    }
+  }
+
+  async createTrack(input: {
+    albumId: string | null;
+    artistId: string | null;
+    title: string;
+    trackNo: number | null;
+    discNo: number | null;
+    durationSeconds: number | null;
+    audioPath: string;
+    mimeType: string | null;
+    fileSize: number | null;
+    genre: string | null;
+    year: number | null;
+  }): Promise<Track> {
+    try {
+      const { data, error } = await this.client
+        .from('tracks')
+        .insert({
+          owner_id: this.ownerId(),
+          album_id: input.albumId,
+          artist_id: input.artistId,
+          title: input.title,
+          track_no: input.trackNo,
+          disc_no: input.discNo,
+          duration_seconds: input.durationSeconds,
+          audio_path: input.audioPath,
+          mime_type: input.mimeType,
+          file_size: input.fileSize,
+          genre: input.genre,
+          year: input.year,
+        })
+        .select('*')
+        .single();
+      if (error) throw error;
+      return data as unknown as Track;
+    } catch (raw) {
+      throw toAppError(raw, `Saving "${input.title}"`);
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Preferences
   // -------------------------------------------------------------------------
 

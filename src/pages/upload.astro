@@ -1,0 +1,330 @@
+---
+/**
+ * Add music.
+ *
+ * Three steps in one screen: pick files, review what was detected, upload.
+ * The review step exists so nobody spends phone bandwidth discovering that
+ * their files are a format Safari can't play.
+ */
+import AppLayout from '../layouts/AppLayout.astro';
+import { icons } from '../lib/ui/icons';
+---
+
+<AppLayout title="Add music · Resonance">
+  <div id="upload-root">
+    <header class="px-4 pt-5 pb-4 flex items-center gap-2">
+      <button onclick="history.back()" class="tap -ml-3" aria-label="Go back">
+        <span set:html={icons.back(24)} />
+      </button>
+      <h1 class="text-[26px] font-bold tracking-tight">Add music</h1>
+    </header>
+
+    <!-- Step 1: choose files -->
+    <section id="step-pick" class="px-4">
+      <label
+        id="dropzone"
+        for="file-input"
+        class="block rounded-2xl border-2 border-dashed px-6 py-12 text-center cursor-pointer transition-colors"
+        style="border-color: var(--border); background: var(--surface)"
+      >
+        <span class="inline-block mb-3" style="color: var(--accent)" set:html={icons.music(40)} />
+        <span class="block text-[17px] font-semibold">Choose music files</span>
+        <span class="block text-[14px] mt-1.5 leading-relaxed" style="color: var(--muted)">
+          MP3, M4A/AAC, WAV or AIFF play everywhere.<br />
+          Titles and artwork are read from each file automatically.
+        </span>
+        <input
+          id="file-input"
+          type="file"
+          multiple
+          accept="audio/*,.mp3,.m4a,.aac,.wav,.aif,.aiff,.flac,.ogg,.opus"
+          class="sr-only"
+        />
+      </label>
+
+      <p class="text-[12px] mt-3 leading-relaxed text-center" style="color: var(--subtle)">
+        Files upload straight from this device to your own Supabase storage.
+        They are never sent anywhere else.
+      </p>
+    </section>
+
+    <!-- Step 2: reading tags -->
+    <section id="step-scan" class="px-4 hidden">
+      <div class="rounded-2xl p-6 text-center" style="background: var(--surface)">
+        <p class="text-[15px] font-medium">Reading track details…</p>
+        <p id="scan-detail" class="text-[13px] mt-1 truncate" style="color: var(--muted)"></p>
+        <div class="h-1 rounded-full mt-4 overflow-hidden" style="background: var(--surface-3)">
+          <div id="scan-bar" class="h-full transition-[width] duration-200" style="width:0%; background: var(--accent)"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 3: review + upload -->
+    <section id="step-review" class="hidden"></section>
+
+    <!-- Step 4: summary -->
+    <section id="step-done" class="hidden px-4"></section>
+  </div>
+</AppLayout>
+
+<script>
+  import { whenConnected } from '../lib/ui/page';
+  import { connection } from '../lib/connection/manager';
+  import {
+    scanFiles, groupByAlbum, importTracks,
+    type ScannedTrack, type ScanResult, type ImportStage,
+  } from '../lib/library/import';
+  import { escapeHtml, formatDuration, pluralize } from '../lib/utils/format';
+  import { showToast } from '../lib/ui/render';
+  import { icons } from '../lib/ui/icons';
+
+  const $ = (id: string) => document.getElementById(id);
+
+  let scanned: ScannedTrack[] = [];
+  let aborter: AbortController | null = null;
+
+  function show(step: 'pick' | 'scan' | 'review' | 'done') {
+    for (const name of ['pick', 'scan', 'review', 'done']) {
+      $(`step-${name}`)?.classList.toggle('hidden', name !== step);
+    }
+  }
+
+  /* ---------------------------------------------------------------- review */
+
+  function renderReview(result: ScanResult): void {
+    scanned = result.tracks;
+    const groups = groupByAlbum(result.tracks);
+    const warned = result.tracks.filter((t) => t.warning).length;
+
+    const albumBlock = (g: ReturnType<typeof groupByAlbum>[number]) => `
+<section class="mb-5">
+  <div class="px-4 mb-1.5">
+    <h2 class="text-[15px] font-semibold truncate">${escapeHtml(g.albumTitle)}</h2>
+    <p class="text-[13px] truncate" style="color:var(--muted)">
+      ${escapeHtml(g.artistName)} · ${pluralize(g.tracks.length, 'track')}
+    </p>
+  </div>
+  ${g.tracks.map((t) => `
+    <div class="flex items-center gap-3 px-4 py-2" data-row="${escapeHtml(t.key)}">
+      <div class="w-6 shrink-0 text-[13px] tabular-nums text-center" style="color:var(--subtle)">
+        ${t.trackNo ?? '–'}
+      </div>
+      <div class="min-w-0 flex-1">
+        <div class="text-[15px] truncate">${escapeHtml(t.title)}</div>
+        ${t.warning ? `<div class="text-[12px] mt-0.5 leading-snug" style="color:var(--accent)">${escapeHtml(t.warning)}</div>` : ''}
+      </div>
+      <div class="text-[13px] tabular-nums shrink-0" style="color:var(--subtle)">
+        ${formatDuration(t.durationSeconds)}
+      </div>
+      <div class="w-5 shrink-0 flex items-center justify-center" data-status="${escapeHtml(t.key)}"></div>
+    </div>`).join('')}
+</section>`;
+
+    $('step-review')!.innerHTML = `
+<div class="px-4 mb-4">
+  <div class="rounded-xl p-3.5" style="background:var(--surface)">
+    <p class="text-[15px] font-medium">
+      ${pluralize(result.tracks.length, 'track')} ready
+      ${groups.length > 1 ? ` across ${pluralize(groups.length, 'album')}` : ''}
+    </p>
+    ${warned ? `<p class="text-[13px] mt-1" style="color:var(--accent)">${pluralize(warned, 'file needs', 'files need')} your attention — see below.</p>` : ''}
+  </div>
+</div>
+
+${result.rejected.length ? `
+<div class="px-4 mb-4">
+  <div class="rounded-xl p-3.5 text-[13px] leading-relaxed" style="background:var(--surface-2)">
+    <p class="font-medium mb-1">${pluralize(result.rejected.length, 'file was', 'files were')} skipped</p>
+    ${result.rejected.slice(0, 5).map((r) =>
+      `<p style="color:var(--muted)">${escapeHtml(r.name)} — ${escapeHtml(r.reason)}</p>`).join('')}
+    ${result.rejected.length > 5 ? `<p style="color:var(--muted)">…and ${result.rejected.length - 5} more</p>` : ''}
+  </div>
+</div>` : ''}
+
+${groups.map(albumBlock).join('')}
+
+<div class="px-4 pt-2 pb-4 sticky bottom-0" style="background:linear-gradient(to top, var(--bg) 70%, transparent)">
+  <div id="upload-progress" class="hidden mb-3">
+    <div class="h-1 rounded-full overflow-hidden" style="background:var(--surface-3)">
+      <div id="upload-bar" class="h-full transition-[width] duration-200" style="width:0%; background:var(--accent)"></div>
+    </div>
+    <p id="upload-detail" class="text-[12px] mt-1.5 text-center" style="color:var(--muted)"></p>
+  </div>
+  <div class="flex gap-2.5">
+    <button id="btn-cancel" class="btn-ghost flex-1 py-3 text-[15px]">Cancel</button>
+    <button id="btn-upload" class="btn-accent flex-1 py-3 text-[15px]">
+      Add ${pluralize(result.tracks.length, 'track')}
+    </button>
+  </div>
+</div>`;
+
+    show('review');
+    $('btn-upload')?.addEventListener('click', () => void runImport());
+    $('btn-cancel')?.addEventListener('click', () => {
+      if (aborter) { aborter.abort(); return; }
+      scanned = [];
+      show('pick');
+    });
+  }
+
+  /* ---------------------------------------------------------------- import */
+
+  const STATUS_ICON: Record<ImportStage, string> = {
+    queued: '',
+    uploading: `<span class="inline-block w-3 h-3 rounded-full animate-pulse" style="background:var(--accent)"></span>`,
+    saving: `<span class="inline-block w-3 h-3 rounded-full animate-pulse" style="background:var(--accent)"></span>`,
+    done: `<span style="color:#34d399">${icons.check(16)}</span>`,
+    skipped: `<span style="color:var(--subtle)">${icons.check(16)}</span>`,
+    failed: `<span style="color:var(--accent)">${icons.warning(15)}</span>`,
+  };
+
+  async function runImport(): Promise<void> {
+    const uploadButton = $('btn-upload') as HTMLButtonElement;
+    const cancelButton = $('btn-cancel') as HTMLButtonElement;
+    const fileInput = $('file-input') as HTMLInputElement;
+
+    aborter = new AbortController();
+    uploadButton.disabled = true;
+    uploadButton.textContent = 'Adding…';
+    cancelButton.textContent = 'Stop';
+    $('upload-progress')?.classList.remove('hidden');
+
+    let settled = 0;
+    const total = scanned.length;
+
+    const summary = await importTracks(scanned, {
+      signal: aborter.signal,
+      onProgress: ({ key, stage, message }) => {
+        const cell = document.querySelector(`[data-status="${CSS.escape(key)}"]`);
+        if (cell) cell.innerHTML = STATUS_ICON[stage] ?? '';
+        if (message && stage === 'failed') {
+          const row = document.querySelector(`[data-row="${CSS.escape(key)}"] .min-w-0`);
+          if (row && !row.querySelector('[data-failure]')) {
+            const note = document.createElement('div');
+            note.dataset.failure = '1';
+            note.className = 'text-[12px] mt-0.5 leading-snug';
+            note.style.color = 'var(--accent)';
+            note.textContent = message;
+            row.appendChild(note);
+          }
+        }
+        if (stage === 'done' || stage === 'skipped' || stage === 'failed') {
+          settled++;
+          const bar = $('upload-bar');
+          if (bar) bar.style.width = `${(settled / total) * 100}%`;
+          const detail = $('upload-detail');
+          if (detail) detail.textContent = `${settled} of ${total}`;
+        }
+      },
+    });
+
+    aborter = null;
+    if (fileInput) fileInput.value = '';
+
+    const lines: string[] = [];
+    if (summary.imported) lines.push(`${pluralize(summary.imported, 'track')} added`);
+    if (summary.skipped) lines.push(`${summary.skipped} already in your library`);
+    if (summary.failed) lines.push(`${pluralize(summary.failed, 'file')} failed`);
+
+    $('step-done')!.innerHTML = `
+<div class="flex flex-col items-center text-center py-12">
+  <div class="mb-4" style="color:${summary.failed ? 'var(--accent)' : '#34d399'}">
+    ${summary.failed ? icons.warning(40) : icons.check(42)}
+  </div>
+  <h2 class="text-[19px] font-semibold">
+    ${summary.cancelled ? 'Stopped' : summary.failed ? 'Finished with problems' : 'All done'}
+  </h2>
+  <p class="text-[14px] mt-2" style="color:var(--muted)">${escapeHtml(lines.join(' · ') || 'Nothing to add')}</p>
+
+  ${summary.failures.length ? `
+    <div class="mt-5 w-full text-left rounded-xl p-3.5 text-[13px] leading-relaxed" style="background:var(--surface-2)">
+      ${summary.failures.slice(0, 6).map((f) =>
+        `<p><span class="font-medium">${escapeHtml(f.title)}</span><br>
+         <span style="color:var(--muted)">${escapeHtml(f.reason)}</span></p>`).join('<div class="h-2"></div>')}
+    </div>` : ''}
+
+  <div class="flex gap-2.5 mt-7 w-full">
+    <button id="btn-more" class="btn-ghost flex-1 py-3 text-[15px]">Add more</button>
+    <a href="/library" class="btn-accent flex-1 py-3 text-[15px] flex items-center justify-center">
+      Go to library
+    </a>
+  </div>
+</div>`;
+
+    show('done');
+    $('btn-more')?.addEventListener('click', () => { scanned = []; show('pick'); });
+
+    if (summary.imported > 0) showToast(`${pluralize(summary.imported, 'track')} added`);
+  }
+
+  /* ------------------------------------------------------------------ scan */
+
+  async function handleFiles(files: File[]): Promise<void> {
+    if (files.length === 0) return;
+
+    if (!connection.getOwnerId()) {
+      showToast('Sign in from Settings before adding music', 'error');
+      return;
+    }
+
+    show('scan');
+    const bar = $('scan-bar');
+    const detail = $('scan-detail');
+
+    try {
+      const result = await scanFiles(files, (done, total, name) => {
+        if (bar) bar.style.width = `${total ? (done / total) * 100 : 0}%`;
+        if (detail) detail.textContent = name;
+      });
+
+      if (result.tracks.length === 0) {
+        showToast(
+          result.rejected[0]?.reason ?? 'No playable audio files were found',
+          'error',
+        );
+        show('pick');
+        return;
+      }
+      renderReview(result);
+    } catch (error) {
+      showToast((error as { userMessage?: string }).userMessage ?? 'Could not read those files', 'error');
+      show('pick');
+    }
+  }
+
+  async function setup() {
+    const root = $('upload-root');
+    if (!root || root.dataset.pageInit === '1') return;
+    root.dataset.pageInit = '1';
+
+    await whenConnected();
+
+    const input = $('file-input') as HTMLInputElement;
+    input?.addEventListener('change', () => {
+      void handleFiles(Array.from(input.files ?? []));
+    });
+
+    // Drag and drop, for desktop.
+    const zone = $('dropzone');
+    const highlight = (on: boolean) => {
+      if (zone) {
+        zone.style.borderColor = on ? 'var(--accent)' : 'var(--border)';
+        zone.style.background = on ? 'var(--surface-2)' : 'var(--surface)';
+      }
+    };
+    for (const name of ['dragenter', 'dragover']) {
+      zone?.addEventListener(name, (e) => { e.preventDefault(); highlight(true); });
+    }
+    for (const name of ['dragleave', 'drop']) {
+      zone?.addEventListener(name, (e) => { e.preventDefault(); highlight(false); });
+    }
+    zone?.addEventListener('drop', (e) => {
+      // Everything dropped is passed through: scanFiles reports *why* each
+      // unusable file was skipped, which beats silently discarding them here.
+      void handleFiles(Array.from((e as DragEvent).dataTransfer?.files ?? []));
+    });
+  }
+
+  setup();
+  document.addEventListener('astro:page-load', setup);
+</script>

@@ -62,13 +62,16 @@ const ctx = () => browser.newContext({ viewport: { width: 393, height: 852 }, is
   await page.waitForTimeout(1500);
   const text = await page.locator('#home-root').textContent();
   check('empty library → helpful empty state, not a blank screen',
-    /library is empty/i.test(text ?? '') && /import/i.test(text ?? ''));
+    /library is empty/i.test(text ?? '') && /add music/i.test(text ?? ''));
   await page.screenshot({ path: `${SHOTS}20-empty-library.png` });
 
   await page.click('[data-nav-href="/library"]');
   await page.waitForTimeout(1200);
+  const libraryText = await page.locator('#library-root').textContent() ?? '';
   check('empty Library tab has its own empty state',
-    /No songs yet/i.test(await page.locator('#library-root').textContent() ?? ''));
+    /No songs yet/i.test(libraryText));
+  check('empty states route the user to the upload screen',
+    await page.locator('#library-root a[href="/upload"]').count() > 0);
   await c.close();
 }
 

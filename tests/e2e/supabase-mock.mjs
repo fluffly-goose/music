@@ -115,6 +115,10 @@ export const SESSION = {
 
 /** Installs the Supabase mock onto a Playwright page. */
 export async function installMock(page, options = {}) {
+  // Records what an import wrote, for assertions.
+  const uploaded = options.uploaded ?? [];
+  const inserted = options.inserted ?? [];
+
   await page.route('**/demo.supabase.co/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -135,6 +139,20 @@ export async function installMock(page, options = {}) {
 
     // --- storage ----------------------------------------------------------
     if (path.startsWith('/storage/v1/object/list/')) return json([{ name: 'albums' }]);
+
+    // Uploads: POST/PUT /storage/v1/object/<bucket>/<key>
+    if (
+      path.startsWith('/storage/v1/object/') &&
+      !path.startsWith('/storage/v1/object/sign/') &&
+      ['POST', 'PUT'].includes(route.request().method())
+    ) {
+      const key = decodeURIComponent(path.replace(/^\/storage\/v1\/object\/[^/]+\//, ''));
+      uploaded.push(key);
+      return json({ Id: `obj-${uploaded.length}`, Key: key });
+    }
+    if (path.startsWith('/storage/v1/object/') && route.request().method() === 'DELETE') {
+      return json({ message: 'ok' });
+    }
     if (path.startsWith('/storage/v1/object/sign/')) {
       const body = route.request().postDataJSON?.() ?? {};
       if (Array.isArray(body.paths)) {
@@ -147,6 +165,23 @@ export async function installMock(page, options = {}) {
     // --- rest -------------------------------------------------------------
     if (!path.startsWith('/rest/v1/')) return json({});
     const table = path.replace('/rest/v1/', '');
+
+    // Inserts: echo the row back with a generated id, as PostgREST would.
+    if (route.request().method() === 'POST' && table !== 'play_history') {
+      const payload = route.request().postDataJSON?.() ?? {};
+      const rows = (Array.isArray(payload) ? payload : [payload]).map((row, i) => ({
+        id: `${table}-new-${inserted.length + i + 1}`,
+        created_at: new Date().toISOString(),
+        cover_path: null,
+        ...row,
+      }));
+      inserted.push(...rows.map((r) => ({ table, row: r })));
+      const wantsOne = (route.request().headers()['accept'] ?? '').includes('vnd.pgrst.object');
+      return json(wantsOne ? rows[0] : rows);
+    }
+    if (['PATCH', 'PUT'].includes(route.request().method())) {
+      return json([]);
+    }
     const prefer = route.request().headers()['prefer'] ?? '';
     const wantsCount = prefer.includes('count=');
     const isHead = route.request().method() === 'HEAD';
@@ -204,6 +239,19 @@ export async function installMock(page, options = {}) {
       ];
     } else if (table === 'user_preferences') {
       rows = [];
+    }
+
+    // Generic PostgREST filters (eq. / is.null) across any column. The
+    // per-table blocks above only cover the read screens; imports look rows up
+    // by name/title, and without this every lookup matched everything.
+    for (const [key, raw] of url.searchParams.entries()) {
+      if (['select', 'limit', 'offset', 'order', 'on_conflict', 'columns'].includes(key)) continue;
+      if (raw.startsWith('eq.')) {
+        const want = raw.slice(3);
+        rows = rows.filter((r) => r && String(r[key]) === want);
+      } else if (raw === 'is.null') {
+        rows = rows.filter((r) => r && (r[key] === null || r[key] === undefined));
+      }
     }
 
     if (options.emptyLibrary) rows = [];
