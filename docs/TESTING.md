@@ -98,6 +98,11 @@ Run this on the real device, over HTTPS.
 - [ ] The edit sheet can be dragged down to dismiss
 - [ ] Cancelling discards changes
 - [ ] Renaming a song, album and artist all stick after a reload
+- [ ] Changing one song's artist moves only that song
+- [ ] Changing an album's artist moves every song on it too — check the old
+      artist's page is gone and the songs appear under the new one
+- [ ] Moving a song into an album that does not exist yet creates it
+- [ ] An artist left with nothing after a move disappears from Library → Artists
 - [ ] Changing album artwork shows the new image (not a cached old one)
 - [ ] The artist sheet warns how many albums and songs a rename affects
 - [ ] Deleting a song removes it and frees the storage file

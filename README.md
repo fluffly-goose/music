@@ -152,14 +152,23 @@ which is why `.env` is gitignored and never bundled into the site.
 
 Tags are often wrong, and nothing here is permanent:
 
-- **A song** — the **…** menu on any row → *Edit details*. Title, track and
-  disc number, year, genre. Delete removes the row and its audio file.
+- **A song** — the **…** menu on any row → *Edit details*. Title, **artist**,
+  **album**, track and disc number, year, genre. Changing the artist or album
+  moves that one song. Delete removes the row and its audio file.
 - **An album** — the pencil on the album screen. Title, artist, year, genre and
-  the cover art. Typing an artist who does not exist yet creates them; typing
-  an existing one moves the album across.
+  the cover art. Changing the artist moves the album **and every song on it**,
+  which is the efficient fix when a whole import landed under the wrong name.
 - **An artist** — the pencil on the artist screen. Name, biography and photo.
   Because an artist is one shared record, the sheet says up front how many
   albums and songs a rename will touch.
+
+Use whichever matches the mistake: the album sheet for a whole album, the song
+sheet for the odd track a compilation got wrong. Typing a name that does not
+exist yet creates it, so neither needs anything set up in advance.
+
+Artists and albums left holding nothing after a move are removed automatically
+— both are created implicitly by importing, so without that the library slowly
+fills with empty entries.
 
 New artwork uploads under a fresh object key rather than overwriting the old
 one, so a cached signed URL can never keep serving the previous image; the old
@@ -420,7 +429,7 @@ npm test
 | Library | query construction, pagination, error mapping |
 | Import | tag reading, filename fallbacks, de-duplication, rollback, cancellation |
 | Connection status | telling "signed out behind RLS" apart from "an empty library" |
-| Editing | partial patches, clearing fields, duplicate-artist clashes, delete cleanup |
+| Editing | partial patches, moving songs, album-wide artist cascade, duplicate clashes, delete cleanup |
 | Errors | every Supabase failure mode maps to actionable advice |
 
 ### Browser tests
@@ -431,7 +440,7 @@ npm run test:all        # unit -> build -> browser
 
 `tests/e2e/` drives the real built app in headless Chromium at a 393x852
 iPhone viewport against a mocked Supabase project that serves real audio and
-real artwork. 144 checks across seven suites:
+real artwork. 151 checks across seven suites:
 
 | Suite | Covers |
 |---|---|
@@ -441,7 +450,7 @@ real artwork. 144 checks across seven suites:
 | `gate-fields.mjs` | A restored config repopulates the form; typing survives a failed connect |
 | `upload.mjs` | Picking files, reading tags in-browser, the review step, uploading to Storage, owner-prefixed keys, entity reuse |
 | `signed-out.mjs` | Signed out behind RLS prompts for sign-in; Settings offers it; an anonymously-readable library is not nagged |
-| `editing.mjs` | Editing songs, albums and artists; validation; cancel discards; artwork upload; delete |
+| `editing.mjs` | Editing songs, albums and artists; moving one song; an album's artist cascading to its songs; validation; artwork upload; delete |
 
 Playwright needs a browser once: `npx playwright install chromium`. If your
 environment already ships one, point at it with `PLAYWRIGHT_EXECUTABLE_PATH`.

@@ -620,6 +620,10 @@ class MusicLibraryService {
     id: string,
     patch: {
       title?: string;
+      /** Moving one song to a different artist, independent of its album. */
+      artist_id?: string | null;
+      /** Moving one song to a different album. */
+      album_id?: string | null;
       track_no?: number | null;
       disc_no?: number | null;
       year?: number | null;
@@ -717,6 +721,49 @@ class MusicLibraryService {
       if (error) throw error;
     } catch (raw) {
       throw toAppError(raw, 'Deleting album');
+    }
+  }
+
+  /**
+   * Re-points every track of an album at an artist.
+   *
+   * `tracks.artist_id` is independent of `albums.artist_id`, so changing an
+   * album's artist without this leaves each song still attributed to - and
+   * still listed under - the previous one.
+   */
+  async setAlbumTracksArtist(albumId: string, artistId: string | null): Promise<void> {
+    try {
+      const { error } = await this.client
+        .from('tracks')
+        .update({ artist_id: artistId })
+        .eq('album_id', albumId);
+      if (error) throw error;
+    } catch (raw) {
+      throw toAppError(raw, 'Updating the album\'s songs');
+    }
+  }
+
+  async getAlbumTrackCount(albumId: string): Promise<number> {
+    try {
+      const { count, error } = await this.client
+        .from('tracks')
+        .select('id', { count: 'exact', head: true })
+        .eq('album_id', albumId);
+      if (error) throw error;
+      return count ?? 0;
+    } catch {
+      // Only used to decide whether a leftover is empty; assume it is not.
+      return 1;
+    }
+  }
+
+  /** Artists hold no files, so removing an empty one is pure cleanup. */
+  async deleteArtist(id: string): Promise<void> {
+    try {
+      const { error } = await this.client.from('artists').delete().eq('id', id);
+      if (error) throw error;
+    } catch (raw) {
+      throw toAppError(raw, 'Removing artist');
     }
   }
 

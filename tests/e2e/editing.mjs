@@ -114,8 +114,11 @@ await page.fill('#edit-track_no', '4');
 await page.click('[data-save]');
 await page.waitForTimeout(1500);
 
-const trackPatch = updated.find((u) => u.table === 'tracks');
-check('saving a song sends its new title', trackPatch?.patch?.title === 'Slow Tide (Edit)');
+// Filter on the id filter: an album-wide artist cascade also patches `tracks`,
+// but by album_id rather than by a single row.
+const trackPatch = updated.find((u) => u.table === 'tracks' && u.filters?.id);
+check('saving a song sends its new title', trackPatch?.patch?.title === 'Slow Tide (Edit)',
+  String(trackPatch?.patch?.title ?? '(none)'));
 check('numeric fields are saved as numbers', trackPatch?.patch?.track_no === 4,
   JSON.stringify(trackPatch?.patch?.track_no));
 
@@ -139,6 +142,58 @@ await page.click('[data-save]');
 await page.waitForTimeout(1500);
 const artistPatch = updated.find((u) => u.table === 'artists');
 check('saving renames the artist', artistPatch?.patch?.name === 'Aurora Fields');
+
+/* --------------------------------------- moving ONE song to another artist */
+{
+  updated.length = 0; inserted.length = 0;
+  await page.goto(`${BASE}/album?id=al1`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(1200);
+  await page.locator('[data-track-menu]').nth(1).click();
+  await page.waitForTimeout(700);
+  await page.locator('#action-panel button', { hasText: 'Edit details' }).click();
+  await page.waitForSelector('.modal.is-open', { timeout: 10000 });
+
+  check('a song can be edited without leaving the album screen',
+    await page.locator('#edit-artist').count() === 1 && await page.locator('#edit-album').count() === 1);
+  check('the song sheet shows its current artist', (await fieldValue('artist')) === 'Aurora Field');
+  check('and its current album', (await fieldValue('album')) === 'Slow Tide');
+  await page.screenshot({ path: `${SHOTS}36-edit-song-move.png` });
+
+  await page.fill('#edit-artist', 'Corrected Artist');
+  await page.click('[data-save]');
+  await page.waitForTimeout(2200);
+
+  const trackPatch = updated.filter((u) => u.table === 'tracks').at(-1);
+  check('changing one song\'s artist patches that song only',
+    Boolean(trackPatch?.patch?.artist_id) && trackPatch?.filters?.id?.startsWith('eq.al1-t'),
+    JSON.stringify(trackPatch?.filters ?? {}));
+  check('the new artist is created on the fly',
+    inserted.some((r) => r.table === 'artists' && r.row.name === 'Corrected Artist'));
+}
+
+/* ------------------------ changing an ALBUM's artist must move its songs */
+{
+  updated.length = 0; inserted.length = 0;
+  await page.goto(`${BASE}/album?id=al3`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(1200);
+  await page.click('#album-edit');
+  await page.waitForSelector('.modal.is-open');
+  await page.fill('#edit-artist', 'Whole Album Artist');
+  await page.click('[data-save]');
+  await page.waitForTimeout(2200);
+
+  const albumPatch = updated.find((u) => u.table === 'albums');
+  check('the album is moved to the new artist', Boolean(albumPatch?.patch?.artist_id));
+
+  // The regression this guards: tracks.artist_id is independent of
+  // albums.artist_id, so without a cascade every song stays under the old one.
+  const cascade = updated.find(
+    (u) => u.table === 'tracks' && u.filters?.album_id === 'eq.al3',
+  );
+  check('and so is every song on it, by album_id in one update',
+    Boolean(cascade) && Boolean(cascade.patch?.artist_id),
+    JSON.stringify(cascade?.filters ?? {}));
+}
 
 /* --------------------------------------------------------------- artwork */
 // Changing album art uploads under a NEW key: overwriting would leave cached

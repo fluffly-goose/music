@@ -280,6 +280,50 @@ describe('editing', () => {
     expect(await library.getArtistUsage('ar1')).toEqual({ albums: 2, tracks: 9 });
   });
 
+  it('moves a single song to a different artist and album', async () => {
+    responder = () => ({ data: null, error: null });
+    await library.updateTrack('t1', { artist_id: 'ar9', album_id: 'al9' });
+    expect(queries[0]!.ops.find((o) => o[0] === 'update')![1]).toEqual({
+      artist_id: 'ar9', album_id: 'al9',
+    });
+    expect(queries[0]!.ops).toContainEqual(['eq', 'id', 't1']);
+  });
+
+  it('re-points a whole album\'s songs at one artist in a single update', async () => {
+    // tracks.artist_id is independent of albums.artist_id, so changing an
+    // album's artist without this leaves every song under the old one.
+    responder = () => ({ data: null, error: null });
+    await library.setAlbumTracksArtist('al1', 'ar9');
+    expect(queries[0]!.table).toBe('tracks');
+    expect(queries[0]!.ops).toContainEqual(['update', { artist_id: 'ar9' }]);
+    expect(queries[0]!.ops).toContainEqual(['eq', 'album_id', 'al1']);
+    expect(queries).toHaveLength(1);
+  });
+
+  it('can clear an album\'s songs of any artist', async () => {
+    responder = () => ({ data: null, error: null });
+    await library.setAlbumTracksArtist('al1', null);
+    expect(queries[0]!.ops).toContainEqual(['update', { artist_id: null }]);
+  });
+
+  it('counts an album\'s songs, to detect one left empty by a move', async () => {
+    responder = () => ({ data: [], error: null, count: 0 });
+    expect(await library.getAlbumTrackCount('al1')).toBe(0);
+  });
+
+  it('assumes an album is not empty when the count cannot be read', async () => {
+    // Guessing "empty" here would delete an album on a transient failure.
+    responder = () => ({ data: null, error: { message: 'network' } });
+    expect(await library.getAlbumTrackCount('al1')).toBe(1);
+  });
+
+  it('deletes an artist by id', async () => {
+    responder = () => ({ data: null, error: null });
+    await library.deleteArtist('ar1');
+    expect(queries[0]!.table).toBe('artists');
+    expect(queries[0]!.ops).toContainEqual(['delete']);
+  });
+
   it('surfaces an RLS refusal when editing someone else\'s row', async () => {
     responder = () => ({ data: null, error: { code: '42501', message: 'permission denied' } });
     await expect(library.updateAlbum('a1', { title: 'x' })).rejects.toMatchObject({ kind: 'forbidden' });
