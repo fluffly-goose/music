@@ -287,15 +287,24 @@ export async function installMock(page, options = {}) {
 }
 
 /** Seeds a remembered connection + session so the app boots straight in. */
-export async function seedConnection(page) {
+/**
+ * Seeds a remembered connection.
+ *
+ * `withSession: false` reproduces the realistic signed-out case: valid
+ * credentials saved, but no auth session. Under correct RLS the project then
+ * answers every SELECT with an empty result rather than an error.
+ */
+export async function seedConnection(page, options = {}) {
+  const withSession = options.withSession !== false;
   await page.addInitScript(
-    ([project, key, session]) => {
+    ([project, key, session, includeSession]) => {
       localStorage.setItem('resonance:connection', JSON.stringify({
         version: 1, savedAt: new Date().toISOString(),
         url: project, publishableKey: key, bucket: 'music',
       }));
-      localStorage.setItem('resonance:auth', JSON.stringify(session));
+      if (includeSession) localStorage.setItem('resonance:auth', JSON.stringify(session));
+      else localStorage.removeItem('resonance:auth');
     },
-    [PROJECT, ANON_KEY, SESSION],
+    [PROJECT, ANON_KEY, SESSION, withSession],
   );
 }

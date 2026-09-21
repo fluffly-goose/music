@@ -54,6 +54,9 @@ that background playback works on iOS until you confirm it below.**
 Run this on the real device, over HTTPS.
 
 ### Setup
+- [ ] Signing in is offered after connecting (not a silently empty library)
+- [ ] **Settings → Sign in** works when connected but signed out
+- [ ] Settings says "Connected — signed out" rather than just "Connected"
 - [ ] Site loads in Safari on iPhone
 - [ ] Onboarding screen is readable, inputs don't trigger zoom on focus
 - [ ] **Test** reports tables and bucket correctly

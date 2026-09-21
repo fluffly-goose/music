@@ -54,8 +54,12 @@ import AppLayout from '../layouts/AppLayout.astro';
     const prefs = loadPreferences();
     const saved = connection.describeSaved();
 
+    // A connection with no session is NOT simply "connected": Row Level
+    // Security hides every row from an anonymous client, so the library looks
+    // empty and nothing can be added. Say so, and offer a way in.
+    const signedIn = Boolean(state.session);
     const statusLabel = {
-      connected: 'Connected',
+      connected: signedIn ? 'Connected' : 'Connected — not signed in',
       'needs-auth': 'Connected — signed out',
       connecting: 'Connecting…',
       error: 'Connection problem',
@@ -63,9 +67,12 @@ import AppLayout from '../layouts/AppLayout.astro';
     }[state.status];
 
     const statusColor =
-      state.status === 'connected' ? '#34d399'
+      state.status === 'connected' && signedIn ? '#34d399'
       : state.status === 'error' ? 'var(--accent)'
+      : state.status === 'connected' || state.status === 'needs-auth' ? '#fbbf24'
       : 'var(--muted)';
+
+    const needsSignIn = Boolean(state.config) && !signedIn && state.status !== 'idle';
 
     let stats = { tracks: 0, albums: 0, artists: 0 };
     if (state.status === 'connected') {
@@ -83,6 +90,12 @@ ${card(
      <span class="w-2 h-2 rounded-full shrink-0" style="background:${statusColor}"></span>
      <span class="text-[15px]">${statusLabel}</span>
    </div>
+   ${needsSignIn ? `
+     <div class="mx-4 mb-3 rounded-xl p-3 text-[13px] leading-relaxed"
+          style="background:color-mix(in srgb, #fbbf24 12%, transparent)">
+       Your library is protected by Row Level Security, so it stays hidden — and
+       you cannot add music — until you sign in.
+     </div>` : ''}
    ${state.config ? saved.map((item) => row(item.label, item.value, { mono: item.key === 'key' })).join('') : ''}
    ${state.session?.user?.email ? row('Signed in as', state.session.user.email) : ''}
    ${state.error ? row('Last error', state.error.userMessage) : ''}`,
@@ -99,11 +112,13 @@ ${card(
     ? row('Songs', String(stats.tracks)) +
       row('Albums', String(stats.albums)) +
       row('Artists', String(stats.artists)) +
-      `<a href="/upload" class="flex items-center justify-between px-4 py-3 border-t row-press"
-          style="border-color:var(--border)">
-         <span class="text-[15px]" style="color:var(--accent)">Add music</span>
-         <span style="color:var(--subtle)">›</span>
-       </a>`
+      (signedIn
+        ? `<a href="/upload" class="flex items-center justify-between px-4 py-3 border-t row-press"
+              style="border-color:var(--border)">
+             <span class="text-[15px]" style="color:var(--accent)">Add music</span>
+             <span style="color:var(--subtle)">›</span>
+           </a>`
+        : '')
     : `<p class="px-4 pb-3 text-[14px]" style="color:var(--muted)">Connect to see your library.</p>`,
 )}
 
@@ -139,7 +154,12 @@ ${card(
 
 <div class="px-4 space-y-2.5 mt-6">
   ${
-    state.status === 'connected' && state.session
+    needsSignIn
+      ? `<button id="btn-signin-settings" class="btn-accent w-full py-3 text-[15px]">Sign in</button>`
+      : ''
+  }
+  ${
+    signedIn
       ? `<button id="btn-signout" class="btn-ghost w-full py-3 text-[15px]">Sign out</button>`
       : ''
   }
@@ -172,6 +192,11 @@ ${
   }
 
   function bind(): void {
+    document.getElementById('btn-signin-settings')?.addEventListener('click', async () => {
+      const { openSignIn } = await import('../lib/ui/gate');
+      openSignIn();
+    });
+
     document.getElementById('pref-shuffle')?.addEventListener('change', (e) => {
       const checked = (e.target as HTMLInputElement).checked;
       savePreferences({ ...loadPreferences(), shuffle: checked });

@@ -22,6 +22,7 @@ const SUITES = [
   ['error states', 'error-states.mjs'],
   ['gate fields', 'gate-fields.mjs'],
   ['in-app upload', 'upload.mjs'],
+  ['signed out', 'signed-out.mjs'],
 ];
 
 async function waitForServer(url, timeoutMs = 30_000) {

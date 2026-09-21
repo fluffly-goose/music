@@ -12,10 +12,12 @@ import type { ConnectionConfig } from './config';
 import { validateConfig, projectRef } from './config';
 import {
   AUTH_STORAGE_KEY,
+  allowAnonymous,
   clearAll,
   clearConnection,
   loadConnection,
   saveConnection,
+  setAllowAnonymous,
 } from './storage';
 import { AppError, toAppError } from '../utils/errors';
 import { createStore, type Store } from '../state/store';
@@ -227,12 +229,19 @@ class ConnectionManager {
 
     // Ask the database whether this session can actually read anything. That
     // distinction - connected vs needs-auth - drives the whole app shell.
+    //
+    // The subtle part: Row Level Security *filters* rows on SELECT, it does
+    // not raise. A correctly-secured project therefore answers an anonymous
+    // client with `200 []`, which looks identical to an empty library. Going
+    // on the absence of an error alone would strand a signed-out user in a
+    // library that appears empty, with nothing prompting them to sign in.
     let status: ConnectionStatus = 'connected';
     let error: AppError | null = null;
     try {
-      const { error: probeError } = await this.client
+      const { count, error: probeError } = await this.client
         .from('tracks')
         .select('id', { count: 'exact', head: true });
+
       if (probeError) {
         const mapped = toAppError(probeError, 'Reading tracks');
         if (mapped.kind === 'auth-required' || mapped.kind === 'forbidden') {
@@ -241,6 +250,14 @@ class ConnectionManager {
           status = 'error';
           error = mapped;
         }
+      } else if (!session && !allowAnonymous()) {
+        // No session and no error. Either the library is genuinely readable
+        // anonymously, or RLS is quietly hiding all of it.
+        //   rows visible  -> anonymous reads really are allowed
+        //   nothing visible -> assume RLS, and offer sign-in
+        // The user can still override this from the sign-in screen, and that
+        // choice is remembered.
+        status = (count ?? 0) > 0 ? 'connected' : 'needs-auth';
       }
     } catch (raw) {
       status = 'error';
@@ -279,6 +296,7 @@ class ConnectionManager {
         cause: error,
       });
     }
+    setAllowAnonymous(false);
     this.store.set({ session: data.session, status: 'connected', error: null });
     return data.session!;
   }
@@ -295,6 +313,15 @@ class ConnectionManager {
     return data.session;
   }
 
+  /**
+   * "Continue without signing in", for a library whose RLS deliberately allows
+   * anonymous reads. Remembered, so it is not asked again on every visit.
+   */
+  continueAnonymously(): void {
+    setAllowAnonymous(true);
+    this.store.set({ status: 'connected', error: null });
+  }
+
   async signOut(): Promise<void> {
     if (!this.client) return;
     try {
@@ -302,6 +329,7 @@ class ConnectionManager {
     } catch {
       /* signing out locally is what matters */
     }
+    setAllowAnonymous(false);
     this.store.set({ session: null, status: 'needs-auth' });
   }
 

@@ -11,6 +11,8 @@ import type { ConnectionConfig } from './config';
 import { DEFAULT_BUCKET, validateConfig } from './config';
 
 export const CONFIG_KEY = 'resonance:connection';
+/** Remembers an explicit "continue without signing in" choice. */
+export const ANON_KEY = 'resonance:allow-anonymous';
 export const PREFS_KEY = 'resonance:preferences';
 /** Namespace for the Supabase client's own token storage. */
 export const AUTH_STORAGE_KEY = 'resonance:auth';
@@ -90,11 +92,37 @@ export function clearAll(): void {
   if (!ls) return;
   try {
     ls.removeItem(CONFIG_KEY);
+    ls.removeItem(ANON_KEY);
     for (const key of Object.keys(ls)) {
       if (key.startsWith(AUTH_STORAGE_KEY) || key.startsWith('sb-')) ls.removeItem(key);
     }
   } catch {
     /* nothing useful to do */
+  }
+}
+
+/**
+ * Whether the user chose to browse without signing in. Only meaningful for a
+ * library whose RLS policies deliberately permit anonymous reads.
+ */
+export function allowAnonymous(): boolean {
+  const ls = safeLocalStorage();
+  if (!ls) return false;
+  try {
+    return ls.getItem(ANON_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function setAllowAnonymous(allow: boolean): void {
+  const ls = safeLocalStorage();
+  if (!ls) return;
+  try {
+    if (allow) ls.setItem(ANON_KEY, '1');
+    else ls.removeItem(ANON_KEY);
+  } catch {
+    /* best effort */
   }
 }
 

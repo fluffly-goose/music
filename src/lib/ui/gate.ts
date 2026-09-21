@@ -28,6 +28,27 @@ let renderedMode: 'connect' | 'signin' | null = null;
  * after the empty form has already been painted.
  */
 let formDirty = false;
+/**
+ * Set when sign-in is requested explicitly (from Settings, or from an action
+ * that needs an account). Screens like Settings suppress the gate so they stay
+ * reachable while disconnected, so without this there would be no way to ask
+ * for credentials from there.
+ */
+let forced = false;
+
+/** Opens the sign-in form even on a screen that normally suppresses the gate. */
+export function openSignIn(): void {
+  if (!connection.getState().config) return;
+  forced = true;
+  renderedMode = null; // rebuild, so a stale connect form is replaced
+  renderGate();
+}
+
+export function closeForcedGate(): void {
+  forced = false;
+  renderedMode = null;
+  renderGate();
+}
 
 export function initGate(): void {
   connection.store.subscribe(() => renderGate(), { immediate: true });
@@ -45,12 +66,12 @@ export function renderGate(): void {
   // Settings stays reachable while disconnected so the user can fix things.
   // 'connecting' counts as gated: dropping the overlay mid-attempt would flash
   // the empty app behind it and discard whatever the user has typed.
-  const needsGate =
-    requiresConnection &&
-    (state.status === 'idle' ||
-      state.status === 'connecting' ||
-      state.status === 'needs-auth' ||
-      state.status === 'error');
+  const gateWorthy =
+    state.status === 'idle' ||
+    state.status === 'connecting' ||
+    state.status === 'needs-auth' ||
+    state.status === 'error';
+  const needsGate = forced || (requiresConnection && gateWorthy);
 
   if (!needsGate) {
     gate.classList.add('hidden');
@@ -60,7 +81,8 @@ export function renderGate(): void {
 
   gate.classList.remove('hidden');
 
-  const mode: 'connect' | 'signin' = state.status === 'needs-auth' ? 'signin' : 'connect';
+  const mode: 'connect' | 'signin' =
+    forced || state.status === 'needs-auth' ? 'signin' : 'connect';
 
   // Same form already on screen: refresh only the error banner, so whatever the
   // user has typed survives a failed connection attempt.
@@ -309,6 +331,11 @@ function signInForm(): string {
 
   <button type="submit" id="btn-signin" class="btn-accent w-full py-3 text-[15px]">Sign in</button>
 
+  <p class="text-[12px] leading-relaxed pt-1" style="color:var(--muted)">
+    No account yet? Create one in your Supabase dashboard under
+    <span class="font-medium">Authentication → Users</span>, then sign in here.
+  </p>
+
   <div class="flex items-center justify-between pt-1">
     <button type="button" id="btn-change-project" class="text-[13px]" style="color:var(--muted)">
       Use a different project
@@ -317,6 +344,9 @@ function signInForm(): string {
       Continue without signing in
     </button>
   </div>
+
+  <button type="button" id="btn-dismiss-gate" class="w-full text-[13px] pt-2 hidden"
+          style="color:var(--muted)">Not now</button>
 
   <p class="text-[12px] leading-relaxed pt-1" style="color:var(--subtle)">
     Your password is sent only to your own Supabase project and is never stored
@@ -342,6 +372,11 @@ function bindSignIn(): void {
 
     try {
       await connection.signIn(email, password);
+      // signIn() updates the store, which re-renders the gate synchronously -
+      // while `forced` is still set. Clear it and render again, or the form
+      // stays up after a successful sign-in.
+      forced = false;
+      renderGate();
       showToast('Signed in');
       window.dispatchEvent(new CustomEvent('resonance:connected'));
     } catch (error) {
@@ -358,8 +393,18 @@ function bindSignIn(): void {
   });
 
   // Escape hatch for libraries whose RLS deliberately allows anonymous reads.
+  // The choice is remembered so it is not asked again every visit.
   $('btn-skip-auth')?.addEventListener('click', () => {
-    connection.store.set({ status: 'connected' });
+    forced = false;
+    connection.continueAnonymously();
     window.dispatchEvent(new CustomEvent('resonance:connected'));
   });
+
+  // Only shown when sign-in was requested explicitly; the user must be able to
+  // back out of it without being stuck behind the overlay.
+  const dismiss = $('btn-dismiss-gate');
+  if (dismiss && forced) {
+    dismiss.classList.remove('hidden');
+    dismiss.addEventListener('click', () => closeForcedGate());
+  }
 }

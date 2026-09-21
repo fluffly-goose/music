@@ -262,8 +262,13 @@ ${groups.map(albumBlock).join('')}
   async function handleFiles(files: File[]): Promise<void> {
     if (files.length === 0) return;
 
+    // Uploading writes rows and objects, both of which RLS scopes to
+    // auth.uid() - so this genuinely needs an account. Ask for one here
+    // rather than sending the user off to find a button elsewhere.
     if (!connection.getOwnerId()) {
-      showToast('Sign in from Settings before adding music', 'error');
+      const { openSignIn } = await import('../lib/ui/gate');
+      openSignIn();
+      showToast('Sign in to add music to your library', 'error');
       return;
     }
 
