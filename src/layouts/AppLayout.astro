@@ -1,0 +1,86 @@
+---
+/**
+ * The application shell.
+ *
+ * Everything that must survive navigation - the <audio> element, the mini
+ * player, the Now Playing sheet and the tab bar - is rendered here and marked
+ * `transition:persist`. With Astro's ClientRouter the *same DOM nodes* are
+ * carried into the next page rather than recreated, which is what lets audio
+ * keep playing while the user moves between screens.
+ */
+import { ClientRouter } from 'astro:transitions';
+import BottomNav from '../components/BottomNav.astro';
+import PlayerChrome from '../components/PlayerChrome.astro';
+import ConnectionGate from '../components/ConnectionGate.astro';
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+  /** Screens that must not render until a Supabase connection exists. */
+  requiresConnection?: boolean;
+}
+
+const { title = 'Resonance', requiresConnection = true } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="description" content="A personal music library, streamed from your own Supabase project." />
+    <!-- viewport-fit=cover is what makes env(safe-area-inset-*) resolve to real
+         values on notched iPhones. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1"
+    />
+    <title>{title}</title>
+
+    <!-- PWA / iOS Home Screen -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0a0a0c" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Resonance" />
+    <link rel="apple-touch-icon" href="/icons/icon-180.png" />
+    <link rel="icon" href="/icons/icon-192.png" type="image/png" />
+
+    <ClientRouter />
+
+    <script is:inline>
+      // Applied before first paint so a non-default theme never flashes.
+      try {
+        const prefs = JSON.parse(localStorage.getItem('resonance:preferences') || '{}');
+        if (prefs.theme && prefs.theme !== 'system') {
+          document.documentElement.dataset.theme = prefs.theme;
+        }
+      } catch {}
+    </script>
+  </head>
+
+  <body>
+    <!--
+      The single audio element for the whole app.
+      transition:persist keeps this exact node (and its playback position)
+      alive across navigations.
+    -->
+    <audio id="app-audio" transition:persist preload="metadata" crossorigin="anonymous"></audio>
+
+    <div id="app-root" data-requires-connection={requiresConnection ? 'true' : 'false'}>
+      <main id="main-region" transition:animate="fade" class="app-scroll">
+        <slot />
+      </main>
+
+      <PlayerChrome />
+      <BottomNav />
+    </div>
+
+    <ConnectionGate />
+
+    <script>
+      import { bootstrap } from '../lib/ui/bootstrap';
+      bootstrap();
+    </script>
+  </body>
+</html>

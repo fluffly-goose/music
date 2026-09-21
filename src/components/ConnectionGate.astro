@@ -1,0 +1,37 @@
+---
+/**
+ * Full-screen overlay shown until a usable Supabase connection exists.
+ *
+ * It covers three states: onboarding (no config), sign-in (config is fine but
+ * RLS wants a user), and a connection error. Rendering is done by
+ * lib/ui/gate.ts against this markup.
+ */
+import { icons } from '../lib/ui/icons';
+---
+
+<div
+  id="connection-gate"
+  transition:persist
+  class="fixed inset-0 z-[70] overflow-y-auto safe-top safe-bottom hidden"
+  style="background: var(--bg)"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="gate-title"
+>
+  <div class="min-h-full flex flex-col justify-center px-6 py-12 max-w-md mx-auto w-full">
+    <div class="mb-8 text-center">
+      <div
+        class="w-16 h-16 rounded-2xl mx-auto mb-5 flex items-center justify-center"
+        style="background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 50%, #7b2ff7))"
+      >
+        <span set:html={icons.music(30)} style="color:#fff" />
+      </div>
+      <h1 id="gate-title" class="text-[26px] font-bold tracking-tight">Resonance</h1>
+      <p class="text-[14px] mt-1.5" style="color: var(--muted)">
+        Your music, from your own Supabase project.
+      </p>
+    </div>
+
+    <div id="gate-body"></div>
+  </div>
+</div>

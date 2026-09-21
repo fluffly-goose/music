@@ -1,0 +1,40 @@
+---
+/**
+ * iPhone tab bar. Persisted across navigation so it never re-animates, and
+ * padded for the home indicator via env(safe-area-inset-bottom).
+ */
+import { icons } from '../lib/ui/icons';
+
+const tabs = [
+  { href: '/', label: 'Home', icon: icons.home(23) },
+  { href: '/library', label: 'Library', icon: icons.library(23) },
+  { href: '/search', label: 'Search', icon: icons.search(23) },
+  { href: '/settings', label: 'Settings', icon: icons.settings(23) },
+];
+---
+
+<nav
+  id="bottom-nav"
+  transition:persist
+  class="fixed bottom-0 inset-x-0 z-50 safe-bottom border-t backdrop-blur-xl"
+  style="background: color-mix(in srgb, var(--surface) 88%, transparent); border-color: var(--border);"
+  aria-label="Primary"
+>
+  <ul class="flex">
+    {
+      tabs.map((tab) => (
+        <li class="flex-1">
+          <a
+            href={tab.href}
+            data-nav-href={tab.href}
+            class="nav-tab flex flex-col items-center gap-0.5 pt-2 pb-1.5 transition-colors"
+            style="color: var(--subtle)"
+          >
+            <span set:html={tab.icon} />
+            <span class="text-[10px] font-medium tracking-tight">{tab.label}</span>
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+</nav>

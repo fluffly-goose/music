@@ -1,0 +1,233 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+---
+
+<!-- requiresConnection=false: Settings must stay reachable when the connection
+     is broken, since it is where the user fixes it. -->
+<AppLayout title="Settings · Resonance" requiresConnection={false}>
+  <div id="settings-root"></div>
+</AppLayout>
+
+<script>
+  import { connection } from '../lib/connection/manager';
+  import { library } from '../lib/library/service';
+  import { player } from '../lib/player/engine';
+  import { loadPreferences, savePreferences, storageAvailable } from '../lib/connection/storage';
+  import { escapeHtml } from '../lib/utils/format';
+  import { showToast } from '../lib/ui/render';
+  import { icons } from '../lib/ui/icons';
+
+  function card(title: string, body: string, footer = ''): string {
+    return `
+<section class="mx-4 mb-4 rounded-2xl overflow-hidden" style="background:var(--surface)">
+  <h2 class="px-4 pt-3.5 pb-2 text-[13px] font-semibold uppercase tracking-wider"
+      style="color:var(--muted)">${escapeHtml(title)}</h2>
+  ${body}
+  ${footer ? `<div class="px-4 pb-3.5 pt-1 text-[12px] leading-relaxed" style="color:var(--subtle)">${footer}</div>` : ''}
+</section>`;
+  }
+
+  function row(label: string, value: string, options: { mono?: boolean } = {}): string {
+    return `
+<div class="flex items-start justify-between gap-4 px-4 py-2.5 border-t" style="border-color:var(--border)">
+  <span class="text-[14px] shrink-0" style="color:var(--muted)">${escapeHtml(label)}</span>
+  <span class="text-[14px] text-right break-all ${options.mono ? 'font-mono text-[12px]' : ''}">${escapeHtml(value)}</span>
+</div>`;
+  }
+
+  function toggleRow(id: string, label: string, description: string, checked: boolean): string {
+    return `
+<label class="flex items-start justify-between gap-4 px-4 py-3 border-t cursor-pointer" style="border-color:var(--border)">
+  <span class="min-w-0">
+    <span class="block text-[15px]">${escapeHtml(label)}</span>
+    <span class="block text-[12px] mt-0.5 leading-relaxed" style="color:var(--muted)">${escapeHtml(description)}</span>
+  </span>
+  <input id="${id}" type="checkbox" ${checked ? 'checked' : ''}
+         class="mt-0.5 w-11 h-6 shrink-0 accent-[var(--accent)]">
+</label>`;
+  }
+
+  async function render() {
+    const root = document.getElementById('settings-root');
+    if (!root) return;
+
+    const state = connection.getState();
+    const prefs = loadPreferences();
+    const saved = connection.describeSaved();
+
+    const statusLabel = {
+      connected: 'Connected',
+      'needs-auth': 'Connected — signed out',
+      connecting: 'Connecting…',
+      error: 'Connection problem',
+      idle: 'Not connected',
+    }[state.status];
+
+    const statusColor =
+      state.status === 'connected' ? '#34d399'
+      : state.status === 'error' ? 'var(--accent)'
+      : 'var(--muted)';
+
+    let stats = { tracks: 0, albums: 0, artists: 0 };
+    if (state.status === 'connected') {
+      stats = await library.getLibraryStats().catch(() => stats);
+    }
+
+    root.innerHTML = `
+<header class="px-4 pt-5 pb-4">
+  <h1 class="text-[30px] font-bold tracking-tight">Settings</h1>
+</header>
+
+${card(
+  'Connection',
+  `<div class="flex items-center gap-2 px-4 pb-3">
+     <span class="w-2 h-2 rounded-full shrink-0" style="background:${statusColor}"></span>
+     <span class="text-[15px]">${statusLabel}</span>
+   </div>
+   ${state.config ? saved.map((item) => row(item.label, item.value, { mono: item.key === 'key' })).join('') : ''}
+   ${state.session?.user?.email ? row('Signed in as', state.session.user.email) : ''}
+   ${state.error ? row('Last error', state.error.userMessage) : ''}`,
+  state.config
+    ? `Stored in this browser only: project URL, publishable key and bucket name.
+       These are public configuration — your Supabase Row Level Security policies
+       are what actually protect your library. Your password is never stored.`
+    : 'No connection configured yet.',
+)}
+
+${card(
+  'Library',
+  state.status === 'connected'
+    ? row('Songs', String(stats.tracks)) + row('Albums', String(stats.albums)) + row('Artists', String(stats.artists))
+    : `<p class="px-4 pb-3 text-[14px]" style="color:var(--muted)">Connect to see your library.</p>`,
+)}
+
+${card(
+  'Playback',
+  toggleRow('pref-shuffle', 'Shuffle', 'Start new queues shuffled.', prefs.shuffle) +
+  `<div class="px-4 py-3 border-t" style="border-color:var(--border)">
+     <div class="text-[15px] mb-2">Repeat</div>
+     <div class="flex gap-2">
+       ${(['off', 'all', 'one'] as const).map((mode) => `
+         <button data-repeat="${mode}"
+           class="flex-1 py-2 rounded-lg text-[14px] capitalize"
+           style="${prefs.repeat === mode
+             ? 'background:var(--text);color:var(--bg)'
+             : 'background:var(--surface-2);color:var(--muted)'}">${mode}</button>`).join('')}
+     </div>
+   </div>`,
+)}
+
+${card(
+  'Appearance',
+  `<div class="px-4 py-3 border-t" style="border-color:var(--border)">
+     <div class="flex gap-2">
+       ${(['dark', 'midnight'] as const).map((theme) => `
+         <button data-theme="${theme}"
+           class="flex-1 py-2 rounded-lg text-[14px] capitalize"
+           style="${prefs.theme === theme
+             ? 'background:var(--text);color:var(--bg)'
+             : 'background:var(--surface-2);color:var(--muted)'}">${theme}</button>`).join('')}
+     </div>
+   </div>`,
+)}
+
+<div class="px-4 space-y-2.5 mt-6">
+  ${
+    state.status === 'connected' && state.session
+      ? `<button id="btn-signout" class="btn-ghost w-full py-3 text-[15px]">Sign out</button>`
+      : ''
+  }
+  ${
+    state.config
+      ? `<button id="btn-switch" class="btn-ghost w-full py-3 text-[15px]">Switch Supabase project</button>
+         <button id="btn-forget" class="w-full py-3 text-[15px] rounded-full"
+                 style="background:color-mix(in srgb, var(--accent) 16%, transparent);color:var(--accent)">
+           Disconnect and clear saved settings
+         </button>`
+      : `<button id="btn-connect-now" class="btn-accent w-full py-3 text-[15px]">Connect to Supabase</button>`
+  }
+</div>
+
+${
+  !storageAvailable()
+    ? `<p class="px-6 mt-5 text-[12px] leading-relaxed" style="color:var(--muted)">
+         This browser is blocking local storage, so settings cannot be remembered
+         between visits.
+       </p>`
+    : ''
+}
+
+<p class="px-6 mt-6 mb-2 text-[12px] leading-relaxed text-center" style="color:var(--subtle)">
+  Resonance streams from your own Supabase project. Nothing is sent to any
+  third-party server.
+</p>`;
+
+    bind();
+  }
+
+  function bind(): void {
+    document.getElementById('pref-shuffle')?.addEventListener('change', (e) => {
+      const checked = (e.target as HTMLInputElement).checked;
+      savePreferences({ ...loadPreferences(), shuffle: checked });
+      if (player.store.get().queue.shuffle !== checked) player.toggleShuffle();
+    });
+
+    document.querySelectorAll<HTMLElement>('[data-repeat]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const mode = button.dataset.repeat as 'off' | 'all' | 'one';
+        player.setRepeat(mode);
+        void render();
+      });
+    });
+
+    document.querySelectorAll<HTMLElement>('[data-theme]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const theme = button.dataset.theme as 'dark' | 'midnight';
+        document.documentElement.dataset.theme = theme;
+        savePreferences({ ...loadPreferences(), theme });
+        void render();
+      });
+    });
+
+    document.getElementById('btn-signout')?.addEventListener('click', async () => {
+      await connection.signOut();
+      player.reset();
+      showToast('Signed out');
+      void render();
+    });
+
+    document.getElementById('btn-switch')?.addEventListener('click', async () => {
+      player.reset();
+      await connection.disconnect({ forget: true });
+      window.location.href = '/';
+    });
+
+    document.getElementById('btn-forget')?.addEventListener('click', async () => {
+      const confirmed = window.confirm(
+        'Remove the saved project URL, key and session from this browser? ' +
+        'Your music and database are not touched.',
+      );
+      if (!confirmed) return;
+      player.reset();
+      await connection.disconnect({ forget: true });
+      showToast('Saved settings cleared');
+      void render();
+    });
+
+    document.getElementById('btn-connect-now')?.addEventListener('click', () => {
+      window.location.href = '/';
+    });
+  }
+
+  function setup() {
+    const root = document.getElementById('settings-root');
+    if (!root || root.dataset.pageInit === '1') return;
+    root.dataset.pageInit = '1';
+    void render();
+    // Keep the screen in step with sign-in/out happening in the gate.
+    connection.store.subscribe(() => void render());
+  }
+
+  setup();
+  document.addEventListener('astro:page-load', setup);
+</script>

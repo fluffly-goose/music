@@ -1,0 +1,191 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+---
+
+<AppLayout title="Playlist · Resonance">
+  <div id="playlist-root"></div>
+</AppLayout>
+
+<script>
+  import { definePage, requireQueryId } from '../lib/ui/page';
+  import { library } from '../lib/library/service';
+  import { hydrateArtwork } from '../lib/library/artwork';
+  import { trackRow, emptyState, errorState, skeletonRows, showToast } from '../lib/ui/render';
+  import {
+    bindTrackList, bindPlayAll, playAllButtons, collectionHeader,
+  } from '../lib/ui/track-actions';
+  import { markPlayingRows } from '../lib/ui/player-ui';
+  import { formatTotalDuration, pluralize } from '../lib/utils/format';
+  import { icons } from '../lib/ui/icons';
+  import type { PlaylistTrack, Track } from '../lib/library/types';
+
+  let entries: PlaylistTrack[] = [];
+  let playlistId = '';
+  const tracks = (): Track[] => entries.map((e) => e.track!).filter(Boolean);
+
+  async function refreshList(): Promise<void> {
+    entries = await library.getPlaylistTracks(playlistId);
+    const list = document.getElementById('playlist-tracks');
+    if (!list) return;
+    list.innerHTML = entries.length
+      ? entries.map((e, i) => rowFor(e, i)).join('')
+      : emptyState('Nothing here yet', 'Add songs from your library using the “…” menu on any track.');
+    await hydrateArtwork(list);
+    markPlayingRows();
+  }
+
+  function rowFor(entry: PlaylistTrack, index: number): string {
+    return `<div class="playlist-entry" data-entry-id="${entry.id}" data-position="${entry.position}">
+              ${trackRow(entry.track!, { index: index + 1, playlistTrackId: entry.id })}
+            </div>`;
+  }
+
+  async function setup() {
+    const root = document.getElementById('playlist-root');
+    if (!root) return;
+
+    await definePage({
+      root,
+      skeleton: `<div class="px-6 pt-4 flex flex-col items-center">
+                   <div class="skeleton w-48 h-48 rounded-xl"></div>
+                   <div class="skeleton h-5 w-40 mt-4"></div>
+                 </div><div class="h-8"></div>${skeletonRows(6)}`,
+
+      load: async () => {
+        const id = requireQueryId();
+        if (!id) return errorState('No playlist selected', 'Open a playlist from your library.');
+        playlistId = id;
+
+        const [playlist, playlistTracks] = await Promise.all([
+          library.getPlaylist(id),
+          library.getPlaylistTracks(id),
+        ]);
+        if (!playlist) {
+          return errorState('Playlist not found', 'It may have been deleted.');
+        }
+
+        entries = playlistTracks;
+        const totalSeconds = tracks().reduce((sum, t) => sum + (t.duration_seconds ?? 0), 0);
+        const meta = [
+          pluralize(entries.length, 'song'),
+          formatTotalDuration(totalSeconds),
+        ].filter(Boolean).join(' · ');
+
+        // With no explicit cover, borrow the first track's album art.
+        const cover = playlist.cover_path ?? entries[0]?.track?.album?.cover_path ?? null;
+
+        return `
+<div class="px-2 pt-2 flex items-center justify-between">
+  <button onclick="history.back()" class="tap -ml-1" aria-label="Go back">${icons.back(24)}</button>
+  <button id="playlist-menu" class="tap -mr-1" aria-label="Playlist options">${icons.more(22)}</button>
+</div>
+${collectionHeader({
+  artPath: cover,
+  seed: playlist.name,
+  title: playlist.name,
+  subtitle: playlist.description ?? '',
+  meta,
+})}
+${entries.length ? playAllButtons('playlist') : ''}
+<div id="playlist-tracks" class="mt-5">
+  ${
+    entries.length
+      ? entries.map((e, i) => rowFor(e, i)).join('')
+      : emptyState('Nothing here yet', 'Add songs from your library using the “…” menu on any track.')
+  }
+</div>`;
+      },
+
+      bind: (root) => {
+        bindPlayAll('playlist', tracks);
+
+        bindTrackList(root, {
+          tracks,
+          // Playlist rows get two extra actions the rest of the app does not have.
+          extraActions: (_track, row) => {
+            const entryId = row.closest<HTMLElement>('[data-entry-id]')?.dataset.entryId;
+            if (!entryId) return [];
+            const index = entries.findIndex((e) => e.id === entryId);
+            return [
+              {
+                label: 'Move up',
+                icon: icons.drag(19),
+                onSelect: async () => {
+                  if (index <= 0) return;
+                  await move(index, index - 1);
+                },
+              },
+              {
+                label: 'Move down',
+                icon: icons.drag(19),
+                onSelect: async () => {
+                  if (index < 0 || index >= entries.length - 1) return;
+                  await move(index, index + 1);
+                },
+              },
+              {
+                label: 'Remove from playlist',
+                icon: icons.trash(19),
+                destructive: true,
+                onSelect: async () => {
+                  await library.removeFromPlaylist(entryId);
+                  await refreshList();
+                  showToast('Removed');
+                },
+              },
+            ];
+          },
+        });
+
+        document.getElementById('playlist-menu')?.addEventListener('click', async () => {
+          const { openActionSheet } = await import('../lib/ui/player-ui');
+          openActionSheet('Playlist', [
+            {
+              label: 'Rename',
+              icon: icons.more(19),
+              onSelect: async () => {
+                const name = window.prompt('New name');
+                if (!name?.trim()) return;
+                await library.renamePlaylist(playlistId, name.trim());
+                window.location.reload();
+              },
+            },
+            {
+              label: 'Delete playlist',
+              icon: icons.trash(19),
+              destructive: true,
+              onSelect: async () => {
+                if (!window.confirm('Delete this playlist? The songs stay in your library.')) return;
+                await library.deletePlaylist(playlistId);
+                window.location.href = '/library?tab=playlists';
+              },
+            },
+          ]);
+        });
+      },
+    });
+  }
+
+  /**
+   * Reorder by writing one fractional position, computed from the neighbours
+   * the entry will sit between after the move.
+   */
+  async function move(from: number, to: number): Promise<void> {
+    const entry = entries[from];
+    if (!entry) return;
+
+    const without = entries.filter((_, i) => i !== from);
+    const before = to > 0 ? (without[to - 1]?.position ?? null) : null;
+    const after = without[to]?.position ?? null;
+
+    try {
+      await library.reorderPlaylistTrack(entry.id, before, after);
+      await refreshList();
+    } catch (error) {
+      showToast((error as { userMessage?: string }).userMessage ?? 'Could not reorder', 'error');
+    }
+  }
+
+  setup();
+  document.addEventListener('astro:page-load', setup);
+</script>

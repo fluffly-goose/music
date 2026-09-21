@@ -1,0 +1,192 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+---
+
+<AppLayout title="Library · Resonance">
+  <div id="library-root"></div>
+</AppLayout>
+
+<script>
+  import { definePage } from '../lib/ui/page';
+  import { library } from '../lib/library/service';
+  import { hydrateArtwork } from '../lib/library/artwork';
+  import {
+    trackRow, albumTile, artistRow, playlistRow, skeletonRows,
+    emptyState, errorState, showToast,
+  } from '../lib/ui/render';
+  import { bindTrackList } from '../lib/ui/track-actions';
+  import { markPlayingRows } from '../lib/ui/player-ui';
+  import { icons } from '../lib/ui/icons';
+  import type { Track } from '../lib/library/types';
+
+  type Tab = 'songs' | 'albums' | 'artists' | 'playlists';
+  const TABS: Tab[] = ['songs', 'albums', 'artists', 'playlists'];
+  const PAGE_SIZE = 60;
+
+  let songs: Track[] = [];
+  let offset = 0;
+  let hasMore = false;
+  let loadingMore = false;
+
+  function tabBar(active: Tab): string {
+    return `
+<div class="flex gap-2 px-4 pb-3 overflow-x-auto" style="scrollbar-width:none">
+  ${TABS.map(
+    (tab) => `
+    <button data-tab="${tab}"
+      class="px-3.5 py-1.5 rounded-full text-[14px] font-medium capitalize whitespace-nowrap transition-colors"
+      style="${
+        tab === active
+          ? 'background:var(--text);color:var(--bg)'
+          : 'background:var(--surface-2);color:var(--muted)'
+      }">${tab}</button>`,
+  ).join('')}
+</div>`;
+  }
+
+  function currentTab(): Tab {
+    const requested = new URLSearchParams(window.location.search).get('tab');
+    return TABS.includes(requested as Tab) ? (requested as Tab) : 'songs';
+  }
+
+  async function renderTab(tab: Tab): Promise<string> {
+    if (tab === 'songs') {
+      offset = 0;
+      const page = await library.getTracks({ offset: 0, limit: PAGE_SIZE });
+      songs = page.items;
+      hasMore = page.hasMore;
+      offset = page.items.length;
+
+      if (!songs.length) {
+        return emptyState('No songs yet', 'Once you import music into Supabase it will show up here.');
+      }
+      return `
+        <div id="song-list">${songs.map((t) => trackRow(t)).join('')}</div>
+        ${hasMore ? `<div class="p-4"><button id="load-more" class="btn-ghost w-full py-3 text-[14px]">Load more</button></div>` : ''}`;
+    }
+
+    if (tab === 'albums') {
+      const page = await library.getAlbums({ limit: 200 });
+      if (!page.items.length) return emptyState('No albums yet', 'Albums appear here as you add music.');
+      return `<div class="grid grid-cols-2 sm:grid-cols-3 gap-4 px-4">
+                ${page.items.map((a) => albumTile(a)).join('')}
+              </div>`;
+    }
+
+    if (tab === 'artists') {
+      const page = await library.getArtists({ limit: 200 });
+      if (!page.items.length) return emptyState('No artists yet', 'Artists appear here as you add music.');
+      return `<div>${page.items.map(artistRow).join('')}</div>`;
+    }
+
+    const playlists = await library.getPlaylists();
+    return `
+      <div class="px-4 pb-3">
+        <button id="new-playlist" class="btn-ghost w-full py-3 text-[14px] flex items-center justify-center gap-2">
+          ${icons.plus(17)} New playlist
+        </button>
+      </div>
+      ${
+        playlists.length
+          ? `<div>${playlists.map(playlistRow).join('')}</div>`
+          : emptyState('No playlists yet', 'Create one to start collecting your favourites.')
+      }`;
+  }
+
+  async function setup() {
+    const root = document.getElementById('library-root');
+    if (!root) return;
+
+    const tab = currentTab();
+
+    await definePage({
+      root,
+      skeleton: `<header class="px-4 pt-5 pb-3"><h1 class="text-[30px] font-bold tracking-tight">Library</h1></header>
+                 ${tabBar(tab)}${skeletonRows(8)}`,
+      load: async () => `
+        <header class="px-4 pt-5 pb-3">
+          <h1 class="text-[30px] font-bold tracking-tight">Library</h1>
+        </header>
+        ${tabBar(tab)}
+        <div id="tab-content">${await renderTab(tab)}</div>`,
+
+      bind: (root) => {
+        // Tabs are query params, so the browser back button works between them.
+        root.addEventListener('click', async (e) => {
+          const button = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]');
+          if (!button) return;
+          const next = button.dataset.tab as Tab;
+          if (next === currentTab()) return;
+
+          history.pushState({}, '', `/library?tab=${next}`);
+          const content = document.getElementById('tab-content');
+          const bar = root.querySelector('[data-tab]')?.parentElement;
+          if (bar) bar.outerHTML = tabBar(next);
+          if (content) {
+            content.innerHTML = skeletonRows(6);
+            try {
+              content.innerHTML = await renderTab(next);
+              await hydrateArtwork(content);
+              markPlayingRows();
+            } catch (error) {
+              content.innerHTML = errorState(
+                (error as { userMessage?: string }).userMessage ?? 'Could not load that tab.',
+                (error as { hint?: string }).hint,
+              );
+            }
+          }
+        });
+
+        bindTrackList(root, { tracks: () => songs });
+
+        // Pagination for large libraries.
+        root.addEventListener('click', async (e) => {
+          if (!(e.target as HTMLElement).closest('#load-more')) return;
+          if (loadingMore) return;
+          loadingMore = true;
+
+          const button = document.getElementById('load-more') as HTMLButtonElement | null;
+          if (button) { button.disabled = true; button.textContent = 'Loading…'; }
+
+          try {
+            const page = await library.getTracks({ offset, limit: PAGE_SIZE });
+            songs = songs.concat(page.items);
+            offset += page.items.length;
+            hasMore = page.hasMore;
+
+            const list = document.getElementById('song-list');
+            if (list) {
+              const fragment = document.createElement('div');
+              fragment.innerHTML = page.items.map((t) => trackRow(t)).join('');
+              list.append(...Array.from(fragment.children));
+              await hydrateArtwork(list);
+              markPlayingRows();
+            }
+            if (!hasMore) button?.parentElement?.remove();
+            else if (button) { button.disabled = false; button.textContent = 'Load more'; }
+          } catch (error) {
+            showToast((error as { userMessage?: string }).userMessage ?? 'Could not load more', 'error');
+            if (button) { button.disabled = false; button.textContent = 'Load more'; }
+          } finally {
+            loadingMore = false;
+          }
+        });
+
+        root.addEventListener('click', async (e) => {
+          if (!(e.target as HTMLElement).closest('#new-playlist')) return;
+          const name = window.prompt('Playlist name');
+          if (!name?.trim()) return;
+          try {
+            const playlist = await library.createPlaylist(name.trim());
+            window.location.href = `/playlist?id=${encodeURIComponent(playlist.id)}`;
+          } catch (error) {
+            showToast((error as { userMessage?: string }).userMessage ?? 'Could not create playlist', 'error');
+          }
+        });
+      },
+    });
+  }
+
+  setup();
+  document.addEventListener('astro:page-load', setup);
+</script>

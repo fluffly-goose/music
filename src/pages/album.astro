@@ -1,0 +1,90 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+---
+
+<AppLayout title="Album · Resonance">
+  <div id="album-root"></div>
+</AppLayout>
+
+<script>
+  import { definePage, requireQueryId } from '../lib/ui/page';
+  import { library } from '../lib/library/service';
+  import { trackRow, emptyState, errorState, skeletonRows } from '../lib/ui/render';
+  import {
+    bindTrackList, bindPlayAll, playAllButtons, collectionHeader,
+  } from '../lib/ui/track-actions';
+  import { formatTotalDuration, pluralize } from '../lib/utils/format';
+  import { icons } from '../lib/ui/icons';
+  import type { Track } from '../lib/library/types';
+
+  let tracks: Track[] = [];
+
+  async function setup() {
+    const root = document.getElementById('album-root');
+    if (!root) return;
+
+    await definePage({
+      root,
+      skeleton: `<div class="px-6 pt-4 flex flex-col items-center">
+                   <div class="skeleton w-48 h-48 rounded-xl"></div>
+                   <div class="skeleton h-5 w-40 mt-4"></div>
+                   <div class="skeleton h-4 w-28 mt-2"></div>
+                 </div><div class="h-8"></div>${skeletonRows(6)}`,
+
+      load: async () => {
+        const id = requireQueryId();
+        if (!id) return errorState('No album selected', 'Open an album from your library.');
+
+        const [album, albumTracks] = await Promise.all([
+          library.getAlbum(id),
+          library.getAlbumTracks(id),
+        ]);
+        if (!album) {
+          return errorState('Album not found', 'It may have been removed from your library.');
+        }
+
+        tracks = albumTracks;
+        const totalSeconds = albumTracks.reduce((sum, t) => sum + (t.duration_seconds ?? 0), 0);
+        const meta = [
+          album.year ? String(album.year) : '',
+          pluralize(albumTracks.length, 'song'),
+          formatTotalDuration(totalSeconds),
+        ].filter(Boolean).join(' · ');
+
+        return `
+${backButton()}
+${collectionHeader({
+  artPath: album.cover_path,
+  seed: album.title,
+  title: album.title,
+  subtitle: album.artist?.name ?? '',
+  subtitleHref: album.artist_id ? `/artist?id=${encodeURIComponent(album.artist_id)}` : undefined,
+  meta,
+})}
+${albumTracks.length ? playAllButtons('album') : ''}
+<div class="mt-5">
+  ${
+    albumTracks.length
+      ? albumTracks.map((t, i) => trackRow(t, { index: t.track_no ?? i + 1 })).join('')
+      : emptyState('No tracks', 'This album has no tracks in the database yet.')
+  }
+</div>`;
+      },
+
+      bind: (root) => {
+        bindPlayAll('album', () => tracks);
+        bindTrackList(root, { tracks: () => tracks });
+      },
+    });
+  }
+
+  function backButton(): string {
+    return `
+<div class="px-2 pt-2">
+  <button onclick="history.back()" class="tap -ml-1" aria-label="Go back">${icons.back(24)}</button>
+</div>`;
+  }
+
+  setup();
+  document.addEventListener('astro:page-load', setup);
+</script>

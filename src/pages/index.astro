@@ -1,0 +1,120 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+---
+
+<AppLayout title="Resonance">
+  <div id="home-root"></div>
+</AppLayout>
+
+<script>
+  import { definePage } from '../lib/ui/page';
+  import { library } from '../lib/library/service';
+  import { player } from '../lib/player/engine';
+  import {
+    albumTile, trackTile, sectionHeader, skeletonShelf, emptyState,
+  } from '../lib/ui/render';
+  import { bindTrackList } from '../lib/ui/track-actions';
+  import type { Track } from '../lib/library/types';
+
+  function greeting(): string {
+    const hour = new Date().getHours();
+    if (hour < 5) return 'Good night';
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  async function setup() {
+    const root = document.getElementById('home-root');
+    if (!root) return;
+
+    let recentTracks: Track[] = [];
+
+    await definePage({
+      root,
+      skeleton: `
+        <div class="px-4 pt-4 pb-6"><div class="skeleton h-8 w-52"></div></div>
+        ${skeletonShelf()}
+        <div class="h-8"></div>
+        ${skeletonShelf()}`,
+
+      load: async () => {
+        // Home is three independent shelves: one slow query should not blank
+        // the whole screen, so failures degrade to an empty shelf.
+        const [recentlyPlayed, recentlyAdded, albums, stats] = await Promise.all([
+          library.getRecentlyPlayed(12).catch(() => []),
+          library.getRecentlyAdded(12).catch(() => []),
+          library.getAlbums({ limit: 12 }).catch(() => ({ items: [], total: 0, hasMore: false })),
+          library.getLibraryStats().catch(() => ({ tracks: 0, albums: 0, artists: 0 })),
+        ]);
+
+        recentTracks = recentlyPlayed;
+
+        if (stats.tracks === 0) {
+          return `
+            <header class="px-4 pt-5 pb-2">
+              <h1 class="text-[30px] font-bold tracking-tight">${greeting()}</h1>
+            </header>
+            ${emptyState(
+              'Your library is empty',
+              'Import music into your Supabase project, then pull to refresh. The README explains the import script and the manual upload route.',
+              { label: 'Open Settings', href: '/settings' },
+            )}`;
+        }
+
+        const sections: string[] = [
+          `<header class="px-4 pt-5 pb-4">
+             <h1 class="text-[30px] font-bold tracking-tight">${greeting()}</h1>
+             <p class="text-[14px] mt-0.5" style="color:var(--muted)">
+               ${stats.tracks} songs · ${stats.albums} albums · ${stats.artists} artists
+             </p>
+           </header>`,
+        ];
+
+        if (recentlyPlayed.length) {
+          sections.push(
+            `<section class="mb-8">
+               ${sectionHeader('Recently played')}
+               <div class="shelf">${recentlyPlayed.map(trackTile).join('')}</div>
+             </section>`,
+          );
+        }
+
+        if (recentlyAdded.length) {
+          sections.push(
+            `<section class="mb-8">
+               ${sectionHeader('Recently added', '/library?tab=albums')}
+               <div class="shelf">${recentlyAdded.map((a) => albumTile(a)).join('')}</div>
+             </section>`,
+          );
+        }
+
+        if (albums.items.length) {
+          sections.push(
+            `<section class="mb-8">
+               ${sectionHeader('From your library', '/library?tab=albums')}
+               <div class="shelf">${albums.items.map((a) => albumTile(a)).join('')}</div>
+             </section>`,
+          );
+        }
+
+        return sections.join('');
+      },
+
+      bind: (root) => {
+        // The "Recently played" shelf uses tiles, not rows, so it gets its own
+        // click handling.
+        root.addEventListener('click', (e) => {
+          const tile = (e.target as HTMLElement).closest<HTMLElement>('[data-tile-track]');
+          if (!tile) return;
+          const index = recentTracks.findIndex((t) => t.id === tile.dataset.trackId);
+          if (index >= 0) void player.playTracks(recentTracks, { startIndex: index });
+        });
+        bindTrackList(root, { tracks: () => recentTracks });
+      },
+    });
+  }
+
+  setup();
+  document.addEventListener('astro:page-load', setup);
+</script>

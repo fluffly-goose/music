@@ -1,0 +1,279 @@
+@import 'tailwindcss';
+
+/* ===========================================================================
+   Design tokens
+   Dark-first, as specified. Two dark themes ship: "dark" (warm near-black,
+   the default) and "midnight" (cooler, higher contrast).
+   =========================================================================== */
+
+@theme {
+  --color-bg: #0a0a0c;
+  --color-surface: #131316;
+  --color-surface-2: #1c1c21;
+  --color-surface-3: #26262d;
+  --color-border: #2e2e36;
+  --color-text: #f4f4f6;
+  --color-muted: #9b9ba6;
+  --color-subtle: #6e6e7a;
+  --color-accent: #ff375f;
+  --color-accent-soft: #ff6b85;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI',
+    system-ui, sans-serif;
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --radius-tile: 0.625rem;
+}
+
+:root {
+  color-scheme: dark;
+  --bg: #0a0a0c;
+  --surface: #131316;
+  --surface-2: #1c1c21;
+  --surface-3: #26262d;
+  --border: #2e2e36;
+  --text: #f4f4f6;
+  --muted: #9b9ba6;
+  --subtle: #6e6e7a;
+  --accent: #ff375f;
+  --accent-soft: #ff6b85;
+  /* Height of the bottom chrome (nav + mini player), kept as a variable so
+     scroll containers can reserve exactly the right space. */
+  --chrome-height: calc(3.75rem + env(safe-area-inset-bottom));
+}
+
+:root[data-theme='midnight'] {
+  --bg: #05060d;
+  --surface: #0d1020;
+  --surface-2: #151a2e;
+  --surface-3: #1e2440;
+  --border: #283052;
+  --text: #eef1ff;
+  --muted: #9aa3c4;
+  --subtle: #6a7396;
+  --accent: #5b7cfa;
+  --accent-soft: #86a0ff;
+}
+
+/* ===========================================================================
+   Base
+   =========================================================================== */
+
+* { -webkit-tap-highlight-color: transparent; }
+
+html {
+  background: var(--bg);
+  /* iOS: keep the rubber-band overscroll area the same colour as the app. */
+  background-attachment: fixed;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior-y: none;
+  /* Stops Safari auto-inflating text in landscape. */
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Only suppress selection on chrome, never on real content. */
+button, nav, .no-select { user-select: none; -webkit-user-select: none; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Honour the system setting. Transitions are restrained by default; this
+   removes them entirely. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ===========================================================================
+   Layout primitives
+   =========================================================================== */
+
+.app-scroll {
+  height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(var(--chrome-height) + 4.25rem);
+  scrollbar-width: none;
+}
+.app-scroll::-webkit-scrollbar { display: none; }
+
+.safe-top { padding-top: env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+/* Every tappable control clears Apple's 44pt minimum. */
+.tap { min-width: 44px; min-height: 44px; display: inline-flex;
+       align-items: center; justify-content: center; }
+
+/* ===========================================================================
+   Components
+   =========================================================================== */
+
+.artwork {
+  background: var(--surface-2);
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.35s var(--ease-out-soft);
+}
+.artwork.is-loaded { opacity: 1; }
+
+.tile-shadow { box-shadow: 0 8px 24px -8px rgb(0 0 0 / 0.7); }
+
+.row-press {
+  transition: background-color 0.15s var(--ease-out-soft);
+}
+.row-press:active { background-color: var(--surface-2); }
+
+.btn-accent {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  border-radius: 9999px;
+  transition: transform 0.15s var(--ease-out-soft), opacity 0.15s;
+}
+.btn-accent:active { transform: scale(0.97); }
+.btn-accent:disabled { opacity: 0.45; }
+
+.btn-ghost {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  transition: background-color 0.15s var(--ease-out-soft);
+}
+.btn-ghost:active { background: var(--surface-3); }
+
+.field {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  color: var(--text);
+  padding: 0.75rem 0.875rem;
+  /* 16px minimum: anything smaller makes iOS Safari zoom on focus. */
+  font-size: 16px;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.field::placeholder { color: var(--subtle); }
+.field:focus { outline: none; border-color: var(--accent); background: var(--surface-3); }
+.field[aria-invalid='true'] { border-color: #ff5c5c; }
+
+/* Marks the row that is currently playing. */
+.is-playing-row { color: var(--accent); }
+
+/* Three-bar equaliser shown on the active row. */
+.eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+.eq span {
+  width: 2px; background: var(--accent); border-radius: 1px;
+  animation: eq-bounce 1s var(--ease-out-soft) infinite;
+}
+.eq span:nth-child(2) { animation-delay: 0.2s; }
+.eq span:nth-child(3) { animation-delay: 0.4s; }
+.eq.is-paused span { animation-play-state: paused; height: 4px; }
+@keyframes eq-bounce {
+  0%, 100% { height: 3px; }
+  50% { height: 12px; }
+}
+
+/* Horizontal shelves on Home. */
+.shelf {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 9.5rem;
+  gap: 0.875rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  padding-inline: 1rem;
+  /* Without this the snapport ignores the padding, so the first tile snaps
+     flush to the edge and loses its gutter. */
+  scroll-padding-inline: 1rem;
+}
+.shelf::-webkit-scrollbar { display: none; }
+.shelf > * { scroll-snap-align: start; }
+
+/* Skeleton shimmer for loading states. */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: var(--radius-tile);
+}
+@keyframes shimmer {
+  to { background-position: -200% 0; }
+}
+
+/* Range inputs: a custom track that works in Safari. */
+.scrub {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  background: transparent;
+  cursor: pointer;
+}
+.scrub::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0%, var(--accent) var(--progress, 0%),
+    var(--surface-3) var(--progress, 0%), var(--surface-3) 100%
+  );
+}
+.scrub::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px; height: 12px; margin-top: -4px;
+  border-radius: 50%; background: var(--text);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+  transition: transform 0.15s var(--ease-out-soft);
+}
+.scrub:active::-webkit-slider-thumb { transform: scale(1.4); }
+.scrub::-moz-range-track {
+  height: 4px; border-radius: 2px; background: var(--surface-3);
+}
+.scrub::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--accent); }
+.scrub::-moz-range-thumb { width: 12px; height: 12px; border: none; border-radius: 50%; background: var(--text); }
+
+/* Mini player hidden state. A transform alone still leaves the element
+   peeking out from under the translucent tab bar, so hide it properly. */
+.mini-hidden {
+  transform: translateY(150%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* The Now Playing sheet slides up over everything. */
+.sheet {
+  position: fixed; inset: 0; z-index: 60;
+  background: var(--bg);
+  transform: translateY(100%);
+  transition: transform 0.36s var(--ease-out-soft);
+  visibility: hidden;
+}
+.sheet.is-open { transform: translateY(0); visibility: visible; }
+
+.line-clamp-2 {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Astro view transitions: cross-fade the main region only, so the persistent
+   player chrome does not flicker between screens. */
+@view-transition { navigation: auto; }
+::view-transition-old(main-region), ::view-transition-new(main-region) {
+  animation-duration: 0.22s;
+}

@@ -1,0 +1,101 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+---
+
+<AppLayout title="Artist · Resonance">
+  <div id="artist-root"></div>
+</AppLayout>
+
+<script>
+  import { definePage, requireQueryId } from '../lib/ui/page';
+  import { library } from '../lib/library/service';
+  import {
+    trackRow, albumTile, sectionHeader, emptyState, errorState, skeletonRows,
+  } from '../lib/ui/render';
+  import {
+    bindTrackList, bindPlayAll, playAllButtons, collectionHeader,
+  } from '../lib/ui/track-actions';
+  import { pluralize, escapeHtml } from '../lib/utils/format';
+  import { icons } from '../lib/ui/icons';
+  import type { Track } from '../lib/library/types';
+
+  let tracks: Track[] = [];
+
+  async function setup() {
+    const root = document.getElementById('artist-root');
+    if (!root) return;
+
+    await definePage({
+      root,
+      skeleton: `<div class="px-6 pt-4 flex flex-col items-center">
+                   <div class="skeleton w-48 h-48 rounded-full"></div>
+                   <div class="skeleton h-5 w-36 mt-4"></div>
+                 </div><div class="h-8"></div>${skeletonRows(6)}`,
+
+      load: async () => {
+        const id = requireQueryId();
+        if (!id) return errorState('No artist selected', 'Open an artist from your library.');
+
+        const [artist, albums, artistTracks] = await Promise.all([
+          library.getArtist(id),
+          library.getArtistAlbums(id),
+          library.getArtistTracks(id),
+        ]);
+        if (!artist) {
+          return errorState('Artist not found', 'They may have been removed from your library.');
+        }
+
+        tracks = artistTracks;
+        const meta = [
+          pluralize(albums.length, 'album'),
+          pluralize(artistTracks.length, 'song'),
+        ].join(' · ');
+
+        return `
+<div class="px-2 pt-2">
+  <button onclick="history.back()" class="tap -ml-1" aria-label="Go back">${icons.back(24)}</button>
+</div>
+${collectionHeader({
+  artPath: artist.image_path,
+  seed: artist.name,
+  title: artist.name,
+  subtitle: '',
+  meta,
+  round: true,
+})}
+${artistTracks.length ? playAllButtons('artist') : ''}
+${
+  artist.bio
+    ? `<p class="px-6 mt-5 text-[14px] leading-relaxed line-clamp-2" style="color:var(--muted)">
+         ${escapeHtml(artist.bio)}
+       </p>`
+    : ''
+}
+${
+  albums.length
+    ? `<section class="mt-7">
+         ${sectionHeader('Albums')}
+         <div class="shelf">${albums.map((a) => albumTile(a)).join('')}</div>
+       </section>`
+    : ''
+}
+${
+  artistTracks.length
+    ? `<section class="mt-7">
+         ${sectionHeader('Songs')}
+         ${artistTracks.map((t) => trackRow(t)).join('')}
+       </section>`
+    : emptyState('No songs', 'This artist has no tracks in the database yet.')
+}`;
+      },
+
+      bind: (root) => {
+        bindPlayAll('artist', () => tracks);
+        bindTrackList(root, { tracks: () => tracks });
+      },
+    });
+  }
+
+  setup();
+  document.addEventListener('astro:page-load', setup);
+</script>

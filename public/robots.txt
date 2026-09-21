@@ -1,0 +1,4 @@
+# A personal music library. Nothing here is useful to a crawler, and the
+# content itself is only ever visible to an authenticated owner.
+User-agent: *
+Disallow: /

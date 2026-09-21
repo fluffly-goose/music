@@ -1,0 +1,167 @@
+---
+/**
+ * Mini player + full Now Playing sheet + queue sheet.
+ *
+ * All three are persisted across navigation and driven by lib/ui/player-ui.ts,
+ * which subscribes to the playback store. They are markup only - no data.
+ */
+import { icons } from '../lib/ui/icons';
+---
+
+<!-- ------------------------------------------------------------------ -->
+<!-- Mini player: sits directly above the tab bar whenever a track is loaded -->
+<!-- ------------------------------------------------------------------ -->
+<div
+  id="mini-player"
+  transition:persist
+  class="mini-hidden fixed inset-x-0 z-50 border-t backdrop-blur-xl transition-all duration-300"
+  style="bottom: var(--chrome-height); background: color-mix(in srgb, var(--surface-2) 92%, transparent); border-color: var(--border);"
+>
+  <div class="h-0.5 w-full" style="background: var(--surface-3)">
+    <div id="mini-progress" class="h-full transition-[width] duration-200" style="width:0%; background: var(--accent)"></div>
+  </div>
+
+  <div class="flex items-center gap-3 px-3 py-2">
+    <button
+      id="mini-expand"
+      class="flex items-center gap-3 flex-1 min-w-0 text-left"
+      aria-label="Open Now Playing"
+    >
+      <div class="w-10 h-10 rounded-md overflow-hidden shrink-0" id="mini-art-wrap">
+        <img id="mini-art" class="artwork w-full h-full" alt="" />
+      </div>
+      <div class="min-w-0 flex-1">
+        <div id="mini-title" class="text-[14px] font-medium truncate leading-tight">Not playing</div>
+        <div id="mini-artist" class="text-[12px] truncate" style="color: var(--muted)"></div>
+      </div>
+    </button>
+
+    <button id="mini-play" class="tap shrink-0" aria-label="Play">
+      <span set:html={icons.play(24)} />
+    </button>
+    <button id="mini-next" class="tap shrink-0 -ml-1" aria-label="Next track">
+      <span set:html={icons.next(22)} />
+    </button>
+  </div>
+</div>
+
+<!-- ------------------------------------------------------------------ -->
+<!-- Now Playing                                                          -->
+<!-- ------------------------------------------------------------------ -->
+<section id="now-playing" transition:persist class="sheet safe-top safe-bottom" aria-label="Now Playing">
+  <div class="h-full flex flex-col px-6 pb-4 max-w-lg mx-auto w-full">
+    <header class="flex items-center justify-between py-3 shrink-0">
+      <button id="np-close" class="tap -ml-3" aria-label="Close Now Playing">
+        <span set:html={icons.chevronDown(26)} />
+      </button>
+      <div class="text-[12px] font-medium uppercase tracking-wider" style="color: var(--muted)">
+        Now Playing
+      </div>
+      <button id="np-queue-open" class="tap -mr-3" aria-label="Show queue">
+        <span set:html={icons.queue(22)} />
+      </button>
+    </header>
+
+    <div class="flex-1 flex items-center justify-center min-h-0 py-2">
+      <div class="w-full max-w-sm aspect-square rounded-2xl overflow-hidden tile-shadow">
+        <img id="np-art" class="artwork w-full h-full" alt="" />
+      </div>
+    </div>
+
+    <div class="shrink-0 pb-2">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <h2 id="np-title" class="text-[22px] font-bold tracking-tight truncate leading-tight"></h2>
+            <a id="np-artist" class="text-[16px] truncate block mt-0.5" style="color: var(--accent)"></a>
+          </div>
+        </div>
+
+        <!-- Progress -->
+        <div class="mt-5">
+          <input
+            id="np-scrub"
+            class="scrub"
+            type="range"
+            min="0"
+            max="1000"
+            value="0"
+            step="1"
+            aria-label="Seek"
+          />
+          <div class="flex justify-between text-[11px] tabular-nums mt-1" style="color: var(--subtle)">
+            <span id="np-elapsed">0:00</span>
+            <span id="np-remaining">-0:00</span>
+          </div>
+        </div>
+
+        <!-- Transport -->
+        <div class="flex items-center justify-between mt-3">
+          <button id="np-shuffle" class="tap" aria-label="Shuffle" aria-pressed="false" style="color: var(--muted)">
+            <span set:html={icons.shuffle(20)} />
+          </button>
+          <button id="np-prev" class="tap" aria-label="Previous track">
+            <span set:html={icons.previous(32)} />
+          </button>
+          <button
+            id="np-play"
+            class="tap w-16 h-16 rounded-full"
+            style="background: var(--text); color: var(--bg)"
+            aria-label="Play"
+          >
+            <span set:html={icons.play(30)} />
+          </button>
+          <button id="np-next" class="tap" aria-label="Next track">
+            <span set:html={icons.next(32)} />
+          </button>
+          <button id="np-repeat" class="tap" aria-label="Repeat" style="color: var(--muted)">
+            <span set:html={icons.repeat(20)} />
+          </button>
+        </div>
+
+        <!-- Volume. Hidden on iOS, where volume is hardware-only and the
+             slider would be a dead control. -->
+        <div id="np-volume-wrap" class="flex items-center gap-3 mt-5">
+          <button id="np-mute" class="tap -ml-2 shrink-0" style="color: var(--muted)" aria-label="Mute">
+            <span set:html={icons.volume(17)} />
+          </button>
+          <input
+            id="np-volume"
+            class="scrub flex-1"
+            type="range"
+            min="0"
+            max="100"
+            value="100"
+            aria-label="Volume"
+          />
+        </div>
+    </div>
+  </div>
+</section>
+
+<!-- ------------------------------------------------------------------ -->
+<!-- Queue                                                                -->
+<!-- ------------------------------------------------------------------ -->
+<section id="queue-sheet" transition:persist class="sheet safe-top safe-bottom" aria-label="Queue">
+  <div class="h-full flex flex-col max-w-lg mx-auto w-full">
+    <header class="flex items-center justify-between px-6 py-3 shrink-0 border-b" style="border-color: var(--border)">
+      <button id="queue-close" class="tap -ml-3" aria-label="Close queue">
+        <span set:html={icons.chevronDown(26)} />
+      </button>
+      <div class="text-[12px] font-medium uppercase tracking-wider" style="color: var(--muted)">
+        Up Next
+      </div>
+      <div class="w-11"></div>
+    </header>
+    <div id="queue-list" class="flex-1 overflow-y-auto py-2"></div>
+  </div>
+</section>
+
+<!-- Bottom sheet for per-track actions (play next, add to playlist, ...) -->
+<div id="action-sheet" transition:persist class="fixed inset-0 z-[65] hidden" role="dialog" aria-modal="true">
+  <div id="action-backdrop" class="absolute inset-0" style="background: rgb(0 0 0 / .6)"></div>
+  <div
+    id="action-panel"
+    class="absolute inset-x-0 bottom-0 rounded-t-2xl safe-bottom p-2 transition-transform duration-300 translate-y-full"
+    style="background: var(--surface-2)"
+  ></div>
+</div>

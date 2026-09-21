@@ -1,0 +1,108 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+---
+
+<AppLayout title="Search · Resonance">
+  <div id="search-root"></div>
+</AppLayout>
+
+<script>
+  import { whenConnected } from '../lib/ui/page';
+  import { library } from '../lib/library/service';
+  import { hydrateArtwork } from '../lib/library/artwork';
+  import { trackRow, albumRow, artistRow, emptyState, errorState, skeletonRows } from '../lib/ui/render';
+  import { bindTrackList } from '../lib/ui/track-actions';
+  import { markPlayingRows } from '../lib/ui/player-ui';
+  import { debounce, escapeHtml } from '../lib/utils/format';
+  import { icons } from '../lib/ui/icons';
+  import type { Track } from '../lib/library/types';
+
+  let results: Track[] = [];
+
+  async function setup() {
+    const root = document.getElementById('search-root');
+    if (!root || root.dataset.pageInit === '1') return;
+    root.dataset.pageInit = '1';
+
+    root.innerHTML = `
+      <header class="px-4 pt-5 pb-3">
+        <h1 class="text-[30px] font-bold tracking-tight mb-4">Search</h1>
+        <div class="relative">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                style="color:var(--subtle)">${icons.search(18)}</span>
+          <input id="search-input" class="field pl-10" type="search" enterkeyhint="search"
+                 autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"
+                 placeholder="Songs, albums and artists" aria-label="Search your library">
+        </div>
+      </header>
+      <div id="search-results" aria-live="polite">
+        ${emptyState('Find something to play', 'Search across every song, album and artist in your library.')}
+      </div>`;
+
+    await whenConnected();
+
+    const input = document.getElementById('search-input') as HTMLInputElement;
+    const output = document.getElementById('search-results')!;
+
+    const run = async (term: string) => {
+      if (!term.trim()) {
+        results = [];
+        output.innerHTML = emptyState(
+          'Find something to play',
+          'Search across every song, album and artist in your library.',
+        );
+        return;
+      }
+
+      output.innerHTML = skeletonRows(5);
+      try {
+        const found = await library.search(term);
+        results = found.tracks;
+
+        const total = found.tracks.length + found.albums.length + found.artists.length;
+        if (total === 0) {
+          output.innerHTML = emptyState(
+            'No results',
+            `Nothing in your library matches “${term}”.`,
+          );
+          return;
+        }
+
+        const section = (title: string, rows: string) =>
+          rows
+            ? `<section class="mb-6">
+                 <h2 class="text-[13px] font-semibold uppercase tracking-wider px-4 mb-2"
+                     style="color:var(--muted)">${escapeHtml(title)}</h2>
+                 ${rows}
+               </section>`
+            : '';
+
+        output.innerHTML =
+          section('Songs', found.tracks.map((t) => trackRow(t)).join('')) +
+          section('Albums', found.albums.map(albumRow).join('')) +
+          section('Artists', found.artists.map(artistRow).join(''));
+
+        await hydrateArtwork(output);
+        markPlayingRows();
+      } catch (error) {
+        output.innerHTML = errorState(
+          (error as { userMessage?: string }).userMessage ?? 'Search failed.',
+          (error as { hint?: string }).hint,
+        );
+      }
+    };
+
+    // 220ms keeps typing responsive without a query per keystroke.
+    const debounced = debounce((term: string) => void run(term), 220);
+    input.addEventListener('input', () => debounced(input.value));
+    input.addEventListener('search', () => void run(input.value));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); input.blur(); void run(input.value); }
+    });
+
+    bindTrackList(output, { tracks: () => results });
+  }
+
+  setup();
+  document.addEventListener('astro:page-load', setup);
+</script>
