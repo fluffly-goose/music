@@ -25,6 +25,7 @@ who points it at their own Supabase project.
 - [Architecture](#architecture)
 - [Security model](#security-model)
 - [Deployment](#deployment)
+- [Letting other people use it](#letting-other-people-use-it)
 - [Commands](#commands)
 - [Known limitations](#known-limitations)
 - [Testing](#testing)
@@ -32,6 +33,8 @@ who points it at their own Supabase project.
 ---
 
 ## Quick start
+
+**Requires Node 22.12 or newer** (Astro 7's minimum). Check with `node -v`.
 
 ```bash
 npm install
@@ -225,6 +228,11 @@ npm run preview      # check the production build locally
 **Serve over HTTPS.** Service workers, `Add to Home Screen` and the Media
 Session API all require a secure context (`localhost` is exempt for development).
 
+**Set the host's Node version to 22.12 or newer.** Astro 7 requires it, and
+`package.json` declares it under `engines` — Vercel, Netlify and Cloudflare
+Pages all read that field, but older projects may have a Node version pinned
+in their dashboard that overrides it.
+
 There are no environment variables to set at build time. Connection details are
 entered by each visitor at runtime, which is what makes one deployment reusable.
 
@@ -232,6 +240,39 @@ entered by each visitor at runtime, which is what makes one deployment reusable.
 
 Open the site in Safari → Share → **Add to Home Screen**. It launches
 full-screen with its own icon.
+
+---
+
+## Letting other people use it
+
+Nothing to build — this already works. Send someone your deployed URL and
+they:
+
+1. Open it and get the same onboarding screen you did.
+2. Enter **their own** Supabase project URL, publishable key and bucket.
+3. Sign in as a user in **their** project and see **their** library.
+
+Their credentials live in their browser's `localStorage` and are sent only to
+their own Supabase project. Nothing routes through yours, and there is no
+account system here to sign up for. They will need to do the one-time
+[Supabase setup](#supabase-setup) — migrations, a user, a bucket — in a
+project they control.
+
+A couple of things this deliberately is *not*:
+
+**It is not a way to share your music with someone.** They get the player,
+not your library. Giving someone access to your collection is a different
+thing with real consequences — Storage egress is billed to you, and sharing a
+personal collection is distribution rather than personal use. The schema could
+support it (every row already carries `owner_id`), but the app does not, and
+adding it is a deliberate decision rather than a config change.
+
+**It does not need a central user database.** There is no server here holding
+anyone's credentials, which is what makes a leak of other people's data
+structurally impossible rather than merely unlikely. If you ever do add
+multi-user sharing, keep it inside one Supabase project using `owner_id` and
+Row Level Security — do not build a service that stores other people's
+Supabase keys.
 
 ---
 

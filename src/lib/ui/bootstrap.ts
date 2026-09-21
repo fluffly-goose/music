@@ -8,7 +8,7 @@
 
 import { connection } from '../connection/manager';
 import { initPlayerUI } from './player-ui';
-import { initGate } from './gate';
+import { initGate, renderGate } from './gate';
 
 let restoreStarted = false;
 
@@ -34,7 +34,7 @@ export function bootstrap(): void {
   // Astro swaps the DOM before page-load; make sure the gate is re-evaluated
   // against the new page's requiresConnection flag.
   document.addEventListener('astro:after-swap', () => {
-    void import('./gate').then((m) => m.renderGate());
+    renderGate();
   });
 }
 
