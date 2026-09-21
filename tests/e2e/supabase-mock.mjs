@@ -239,7 +239,7 @@ export async function installMock(page, options = {}) {
 }
 
 /** Seeds a remembered connection + session so the app boots straight in. */
-export async function seedConnection(page, origin) {
+export async function seedConnection(page) {
   await page.addInitScript(
     ([project, key, session]) => {
       localStorage.setItem('resonance:connection', JSON.stringify({

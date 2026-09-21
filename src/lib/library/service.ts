@@ -69,7 +69,7 @@ class MusicLibraryService {
         .order('title', { ascending: true })
         .range(offset, offset + limit - 1);
       if (error) throw error;
-      return this.toPage<Track>(data as unknown as Track[], count, offset, limit);
+      return this.toPage<Track>(data as unknown as Track[], count, offset);
     } catch (raw) {
       throw toAppError(raw, 'Loading songs');
     }
@@ -160,7 +160,7 @@ class MusicLibraryService {
         .order('title', { ascending: true })
         .range(offset, offset + limit - 1);
       if (error) throw error;
-      return this.toPage<Album>(data as unknown as Album[], count, offset, limit);
+      return this.toPage<Album>(data as unknown as Album[], count, offset);
     } catch (raw) {
       throw toAppError(raw, 'Loading albums');
     }
@@ -211,7 +211,7 @@ class MusicLibraryService {
         .order('name', { ascending: true })
         .range(offset, offset + limit - 1);
       if (error) throw error;
-      return this.toPage<Artist>(data as unknown as Artist[], count, offset, limit);
+      return this.toPage<Artist>(data as unknown as Artist[], count, offset);
     } catch (raw) {
       throw toAppError(raw, 'Loading artists');
     }
@@ -513,7 +513,7 @@ class MusicLibraryService {
     }
   }
 
-  private toPage<T>(data: T[] | null, count: number | null, offset: number, limit: number): Page<T> {
+  private toPage<T>(data: T[] | null, count: number | null, offset: number): Page<T> {
     const items = data ?? [];
     const total = count ?? offset + items.length;
     return { items, total, hasMore: offset + items.length < total };

@@ -16,12 +16,18 @@ import { showToast } from './render';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T | null;
 
-/** True on iOS, where HTMLMediaElement.volume is read-only. */
+/**
+ * True where HTMLMediaElement.volume can actually be changed.
+ *
+ * iOS makes it read-only - volume is hardware-only there - so a slider would
+ * be a dead control. iPadOS reports a desktop Safari user-agent, hence the
+ * touch-points check rather than a UA string alone.
+ */
 function volumeIsSoftwareControllable(): boolean {
   const ua = navigator.userAgent;
-  const isIOS = /iPad|iPhone|iPod/.test(ua) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  return !isIOS;
+  const iPhoneOrIPod = /iPad|iPhone|iPod/.test(ua);
+  const iPadPretendingToBeMac = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+  return !(iPhoneOrIPod || iPadPretendingToBeMac);
 }
 
 let sheetOpen = false;

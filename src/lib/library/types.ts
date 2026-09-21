@@ -86,10 +86,6 @@ export function trackArtwork(track: Track): Artwork {
   return { path: track.album?.cover_path ?? null, seed: track.album?.title ?? track.title };
 }
 
-export function albumArtwork(album: Album): Artwork {
-  return { path: album.cover_path ?? null, seed: album.title };
-}
-
 /** Display artist for a track, falling back through album then "Unknown". */
 export function trackArtistName(track: Track): string {
   return track.artist?.name ?? track.album?.artist?.name ?? 'Unknown Artist';

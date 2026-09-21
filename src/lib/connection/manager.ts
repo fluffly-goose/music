@@ -16,7 +16,6 @@ import {
   clearConnection,
   loadConnection,
   saveConnection,
-  storageAvailable,
 } from './storage';
 import { AppError, toAppError } from '../utils/errors';
 import { createStore, type Store } from '../state/store';
@@ -371,4 +370,3 @@ class ConnectionManager {
 }
 
 export const connection = new ConnectionManager();
-export const storageIsAvailable = storageAvailable;

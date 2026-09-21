@@ -259,7 +259,6 @@ check('a finished track auto-advances to the next one',
 // ------------------------------------------------------ EXPIRED URL RECOVERY
 // Break the asset route, force an audio error, and confirm the engine re-signs
 // and resumes at the same position rather than dropping the listener.
-const posBefore = (await audioState()).time;
 let firstFailureDone = false;
 await page.route('**/mock-asset*', async (route) => {
   if (!firstFailureDone) { firstFailureDone = true; return route.fulfill({ status: 403, body: 'expired' }); }

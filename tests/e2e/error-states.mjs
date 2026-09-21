@@ -1,5 +1,5 @@
 import { chromium } from 'playwright';
-import { installMock, seedConnection, PROJECT, ANON_KEY, SESSION } from './supabase-mock.mjs';
+import { installMock, seedConnection } from './supabase-mock.mjs';
 import { mkdirSync } from 'node:fs';
 import { launchOptions } from './launch.mjs';
 
