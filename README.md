@@ -235,6 +235,22 @@ What gets stored in your browser, and what doesn't:
 The auth session is handled by the Supabase client itself, which persists and
 refreshes its own tokens — this app doesn't manage them.
 
+### Signing in
+
+The app asks you to sign in because it has to. Row Level Security scopes every
+row to `auth.uid()`, so an anonymous client sees an empty library and cannot
+write anything. Create your user under **Authentication → Users**, then sign in
+from the onboarding screen — or later from **Settings → Sign in**.
+
+Worth knowing if you ever debug this yourself: RLS *filters* rows on `SELECT`
+rather than raising. A correctly-secured project answers an anonymous client
+with `200 []`, which looks exactly like an empty library. The app therefore
+treats "no session, and nothing visible" as "you need to sign in", not as an
+empty library.
+
+If your policies deliberately allow anonymous reads, **Continue without signing
+in** skips this, and the choice is remembered.
+
 The publishable key is *public configuration*, not a secret. It identifies your
 project and grants exactly what your RLS policies allow, which is why the
 policies in `0002_rls.sql` matter more than the key does. They restrict every
@@ -384,6 +400,7 @@ npm test
 | Playback | transitions, auto-advance, URL-failure recovery, history recording |
 | Library | query construction, pagination, error mapping |
 | Import | tag reading, filename fallbacks, de-duplication, rollback, cancellation |
+| Connection status | telling "signed out behind RLS" apart from "an empty library" |
 | Errors | every Supabase failure mode maps to actionable advice |
 
 ### Browser tests
@@ -394,7 +411,7 @@ npm run test:all        # unit -> build -> browser
 
 `tests/e2e/` drives the real built app in headless Chromium at a 393x852
 iPhone viewport against a mocked Supabase project that serves real audio and
-real artwork. 98 checks across five suites:
+real artwork. 112 checks across six suites:
 
 | Suite | Covers |
 |---|---|
@@ -403,6 +420,7 @@ real artwork. 98 checks across five suites:
 | `error-states.mjs` | Missing tables, expired session, empty library, missing audio file, unreachable project |
 | `gate-fields.mjs` | A restored config repopulates the form; typing survives a failed connect |
 | `upload.mjs` | Picking files, reading tags in-browser, the review step, uploading to Storage, owner-prefixed keys, entity reuse |
+| `signed-out.mjs` | Signed out behind RLS prompts for sign-in; Settings offers it; an anonymously-readable library is not nagged |
 
 Playwright needs a browser once: `npx playwright install chromium`. If your
 environment already ships one, point at it with `PLAYWRIGHT_EXECUTABLE_PATH`.
