@@ -14,7 +14,7 @@ import { signedUrls } from '../player/urls';
 import { artworkUrl, placeholderArtwork } from '../library/artwork';
 import { player } from '../player/engine';
 import type { Album, Artist, Track } from '../library/types';
-import { trackArtistName } from '../library/types';
+import { trackArtistName, trackArtwork } from '../library/types';
 import { openEditSheet, artworkHeader } from './edit-sheet';
 import { showToast } from './render';
 import { escapeHtml, pluralize } from '../utils/format';
@@ -163,8 +163,18 @@ async function pruneOrphans(options: {
 /* -------------------------------------------------------------------------- */
 
 export async function editTrack(track: Track, onSaved?: () => void | Promise<void>): Promise<void> {
+  const ownerId = requireOwner();
+  // Per-song artwork needs a column that older databases do not have yet.
+  const canSetCover = connection.getFeatures().trackCovers;
+  const currentArt = await artworkUrl(trackArtwork(track));
+  let getArtwork: () => File | null = () => null;
+
   await openEditSheet({
     title: 'Edit song',
+    header: canSetCover
+      ? artworkHeader({ src: currentArt, label: 'Change song artwork' })
+      : undefined,
+    onMount: canSetCover ? (panel) => { getArtwork = mountArtworkPicker(panel); } : undefined,
     fields: [
       { name: 'title', label: 'Title', value: track.title, required: true, maxLength: 200 },
       {
@@ -180,7 +190,9 @@ export async function editTrack(track: Track, onSaved?: () => void | Promise<voi
         value: track.album?.title ?? '',
         maxLength: 200,
         placeholder: 'No album',
-        hint: 'Changing the artist or album moves just this song. A name that does not exist yet is created.',
+        hint: canSetCover
+          ? 'Changing the artist or album moves just this song. A name that does not exist yet is created.'
+          : 'Changing the artist or album moves just this song. Run migration 0004 to give songs their own artwork.',
       },
       { name: 'track_no', label: 'Track', value: track.track_no, placeholder: '—', inputMode: 'numeric' },
       { name: 'disc_no', label: 'Disc', value: track.disc_no, placeholder: '1', inputMode: 'numeric' },
@@ -192,11 +204,18 @@ export async function editTrack(track: Track, onSaved?: () => void | Promise<voi
       confirm: `Delete "${track.title}"? The audio file is removed from storage too. This cannot be undone.`,
       onSelect: async () => {
         const audioPath = track.audio_path;
+        const ownCover = track.cover_path ?? null;
         await library.deleteTrack(track.id);
         // Row first, then bytes: an orphaned object is recoverable, a row
         // pointing at a deleted file is not.
         signedUrls.invalidate(connection.getBucket(), audioPath);
         await removeObject(audioPath);
+        // Artwork belonging to this song alone goes with it; a borrowed album
+        // cover is not ours to remove.
+        if (ownCover) {
+          signedUrls.invalidate(connection.getBucket(), ownCover);
+          await removeObject(ownCover);
+        }
         if (player.store.get().track?.id === track.id) player.reset();
         showToast('Song deleted');
         // Deleting the last song of an album leaves a shell behind otherwise.
@@ -235,6 +254,15 @@ export async function editTrack(track: Track, onSaved?: () => void | Promise<voi
           year: patch.year,
           genre: patch.genre,
         });
+      }
+
+      const file = getArtwork();
+      if (file) {
+        patch.cover_path = await replaceArtwork(
+          file,
+          `${ownerId}/tracks/${track.id}`,
+          track.cover_path ?? null,
+        );
       }
 
       await library.updateTrack(track.id, patch);

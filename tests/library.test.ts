@@ -34,12 +34,16 @@ function makeBuilder(table: string) {
 }
 
 const ownerId = 'owner-1';
+/** Flipped by the tests that care whether 0004 has been applied. */
+let features = { trackCovers: true };
+
 vi.mock('@/lib/connection/manager', () => ({
   connection: {
     requireClient: () => ({ from: (table: string) => makeBuilder(table) }),
     getClient: () => ({ from: (table: string) => makeBuilder(table) }),
     getBucket: () => 'music',
     getOwnerId: () => ownerId,
+    getFeatures: () => features,
   },
 }));
 
@@ -225,6 +229,30 @@ describe('playlists', () => {
     const { library: signedOut } = await import('@/lib/library/service');
     await expect(signedOut.createPlaylist('X')).rejects.toMatchObject({ kind: 'auth-required' });
     vi.doUnmock('@/lib/connection/manager');
+  });
+});
+
+describe('optional schema features', () => {
+  it('asks for cover_path once migration 0004 has been applied', async () => {
+    features = { trackCovers: true };
+    responder = () => ({ data: [], error: null, count: 0 });
+    await library.getTracks();
+    const select = String(queries[0]!.ops.find((o) => o[0] === 'select')![1]);
+    // Match the track's own column, not the album's nested one.
+    expect(select).toContain('audio_path, cover_path,');
+  });
+
+  it('leaves it out when the column is not there yet', async () => {
+    // Asking PostgREST for a column that does not exist fails the whole
+    // query, which would take the library down rather than degrading.
+    features = { trackCovers: false };
+    responder = () => ({ data: [], error: null, count: 0 });
+    await library.getTracks();
+    const select = String(queries[0]!.ops.find((o) => o[0] === 'select')![1]);
+    expect(select).not.toContain('audio_path, cover_path,');
+    // The album's own cover is a different column and always present.
+    expect(select).toContain('album:albums ( id, title, cover_path');
+    features = { trackCovers: true };
   });
 });
 

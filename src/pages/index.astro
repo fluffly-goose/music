@@ -14,15 +14,8 @@ import AppLayout from '../layouts/AppLayout.astro';
     albumTile, trackTile, sectionHeader, skeletonShelf, emptyState,
   } from '../lib/ui/render';
   import { bindTrackList } from '../lib/ui/track-actions';
+  import { logoLockup } from '../lib/ui/logo';
   import type { Track } from '../lib/library/types';
-
-  function greeting(): string {
-    const hour = new Date().getHours();
-    if (hour < 5) return 'Good night';
-    if (hour < 12) return 'Good morning';
-    if (hour < 18) return 'Good afternoon';
-    return 'Good evening';
-  }
 
   async function setup() {
     const root = document.getElementById('home-root');
@@ -33,7 +26,7 @@ import AppLayout from '../layouts/AppLayout.astro';
     await definePage({
       root,
       skeleton: `
-        <div class="px-4 pt-4 pb-6"><div class="skeleton h-8 w-52"></div></div>
+        <header class="page-header">${logoLockup()}</header>
         ${skeletonShelf()}
         <div class="h-8"></div>
         ${skeletonShelf()}`,
@@ -52,9 +45,7 @@ import AppLayout from '../layouts/AppLayout.astro';
 
         if (stats.tracks === 0) {
           return `
-            <header class="px-4 pt-5 pb-2">
-              <h1 class="text-[30px] font-bold tracking-tight">${greeting()}</h1>
-            </header>
+            <header class="page-header">${logoLockup()}</header>
             ${emptyState(
               'Your library is empty',
               'Add some music and it will show up here.',
@@ -63,11 +54,13 @@ import AppLayout from '../layouts/AppLayout.astro';
         }
 
         const sections: string[] = [
-          `<header class="px-4 pt-5 pb-4">
-             <h1 class="text-[30px] font-bold tracking-tight">${greeting()}</h1>
-             <p class="text-[14px] mt-0.5" style="color:var(--muted)">
-               ${stats.tracks} songs · ${stats.albums} albums · ${stats.artists} artists
-             </p>
+          `<header class="page-header">
+             <div>
+               ${logoLockup()}
+               <p class="page-subtitle">
+                 ${stats.tracks} songs · ${stats.albums} albums · ${stats.artists} artists
+               </p>
+             </div>
            </header>`,
         ];
 

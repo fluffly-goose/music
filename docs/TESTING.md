@@ -73,6 +73,10 @@ Run this on the real device, over HTTPS.
 - [ ] Content clears the notch and the home indicator
 
 ### Layout
+- [ ] Page titles clear the status bar and Dynamic Island — this needs a real
+      notched device, the safe-area inset is 0 in any simulator without one
+- [ ] The Resonance lockup on Home is crisp at Retina density
+- [ ] The Home Screen icon matches the in-app mark
 - [ ] Tab bar sits above the home indicator, not under it
 - [ ] Every control is comfortably tappable one-handed
 - [ ] Nothing scrolls horizontally
@@ -104,6 +108,8 @@ Run this on the real device, over HTTPS.
 - [ ] Moving a song into an album that does not exist yet creates it
 - [ ] An artist left with nothing after a move disappears from Library → Artists
 - [ ] Changing album artwork shows the new image (not a cached old one)
+- [ ] A song can be given its own cover, and it wins over the album's
+- [ ] Songs without covers still show their album's art
 - [ ] The artist sheet warns how many albums and songs a rename affects
 - [ ] Deleting a song removes it and frees the storage file
 - [ ] Editing while signed out is refused with a clear message
@@ -151,6 +157,7 @@ are the ones that can't be verified without the device.
 ### Settings
 - [ ] Connection status and library counts are accurate
 - [ ] Theme switching works and survives a reload
+- [ ] Theme survives moving between tabs (it used to revert to dark)
 - [ ] Shuffle/repeat preferences survive a reload
 - [ ] *Disconnect and clear saved settings* returns you to onboarding
 - [ ] After clearing, reopening the app shows onboarding (nothing left behind)

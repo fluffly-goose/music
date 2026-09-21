@@ -50,12 +50,29 @@ const { title = 'Resonance', requiresConnection = true } = Astro.props;
 
     <script is:inline>
       // Applied before first paint so a non-default theme never flashes.
-      try {
-        const prefs = JSON.parse(localStorage.getItem('resonance:preferences') || '{}');
-        if (prefs.theme && prefs.theme !== 'system') {
-          document.documentElement.dataset.theme = prefs.theme;
+      //
+      // It also has to be re-applied after every client-side navigation:
+      // ClientRouter copies the incoming page's <html> attributes over the
+      // live ones, and every page ships data-theme="dark" in its static
+      // markup. Without this the theme silently reverts the moment you move
+      // between screens, which reads as "my preference was not saved".
+      (function () {
+        function applyTheme() {
+          try {
+            var prefs = JSON.parse(localStorage.getItem('resonance:preferences') || '{}');
+            var theme = prefs.theme && prefs.theme !== 'system' ? prefs.theme : 'dark';
+            document.documentElement.dataset.theme = theme;
+          } catch (e) {
+            /* storage blocked; the default in the markup stands */
+          }
         }
-      } catch {}
+        applyTheme();
+        // Inline scripts re-run on each navigation, so bind the listener once.
+        if (!window.__resonanceThemeBound) {
+          window.__resonanceThemeBound = true;
+          document.addEventListener('astro:after-swap', applyTheme);
+        }
+      })();
     </script>
   </head>
 

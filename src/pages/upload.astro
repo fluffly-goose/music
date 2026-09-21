@@ -12,11 +12,11 @@ import { icons } from '../lib/ui/icons';
 
 <AppLayout title="Add music · Resonance">
   <div id="upload-root">
-    <header class="px-4 pt-5 pb-4 flex items-center gap-2">
-      <button onclick="history.back()" class="tap -ml-3" aria-label="Go back">
-        <span set:html={icons.back(24)} />
+    <header class="page-header" style="justify-content: flex-start; gap: 0.75rem">
+      <button onclick="history.back()" class="icon-button" aria-label="Go back">
+        <span set:html={icons.back(20)} />
       </button>
-      <h1 class="text-[26px] font-bold tracking-tight">Add music</h1>
+      <h1 class="page-title" style="font-size: 1.625rem">Add music</h1>
     </header>
 
     <!-- Step 1: choose files -->

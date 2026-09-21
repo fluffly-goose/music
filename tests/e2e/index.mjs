@@ -24,6 +24,7 @@ const SUITES = [
   ['in-app upload', 'upload.mjs'],
   ['signed out', 'signed-out.mjs'],
   ['editing', 'editing.mjs'],
+  ['appearance', 'appearance.mjs'],
 ];
 
 async function waitForServer(url, timeoutMs = 30_000) {

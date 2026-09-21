@@ -21,12 +21,20 @@ import type {
 } from './types';
 
 /** Column lists kept in one place so every query returns the same shape. */
-const TRACK_COLUMNS = `
+/**
+ * Built per call rather than as a constant: `cover_path` only exists once
+ * 0004_track_artwork.sql has run, and asking PostgREST for a column that is
+ * not there fails the whole query rather than omitting it.
+ */
+function trackColumns(): string {
+  const own = connection.getFeatures().trackCovers ? 'cover_path,' : '';
+  return `
   id, album_id, artist_id, title, track_no, disc_no, duration_seconds,
-  audio_path, mime_type, file_size, genre, year, created_at,
+  audio_path, ${own} mime_type, file_size, genre, year, created_at,
   album:albums ( id, title, cover_path, year, artist:artists ( id, name ) ),
   artist:artists ( id, name )
 `;
+}
 
 const ALBUM_COLUMNS = `
   id, artist_id, title, sort_title, year, genre, cover_path, created_at,
@@ -65,7 +73,7 @@ class MusicLibraryService {
     try {
       const { data, error, count } = await this.client
         .from('tracks')
-        .select(TRACK_COLUMNS, { count: 'exact' })
+        .select(trackColumns(), { count: 'exact' })
         .order('title', { ascending: true })
         .range(offset, offset + limit - 1);
       if (error) throw error;
@@ -79,7 +87,7 @@ class MusicLibraryService {
     try {
       const { data, error } = await this.client
         .from('tracks')
-        .select(TRACK_COLUMNS)
+        .select(trackColumns())
         .eq('id', id)
         .maybeSingle();
       if (error) throw error;
@@ -113,7 +121,7 @@ class MusicLibraryService {
     try {
       const { data, error } = await this.client
         .from('play_history')
-        .select(`track_id, played_at, track:tracks ( ${TRACK_COLUMNS} )`)
+        .select(`track_id, played_at, track:tracks ( ${trackColumns()} )`)
         .order('played_at', { ascending: false })
         .limit(limit * 4);
       if (error) throw error;
@@ -185,7 +193,7 @@ class MusicLibraryService {
     try {
       const { data, error } = await this.client
         .from('tracks')
-        .select(TRACK_COLUMNS)
+        .select(trackColumns())
         .eq('album_id', albumId)
         .order('disc_no', { ascending: true, nullsFirst: true })
         .order('track_no', { ascending: true, nullsFirst: true })
@@ -250,7 +258,7 @@ class MusicLibraryService {
     try {
       const { data, error } = await this.client
         .from('tracks')
-        .select(TRACK_COLUMNS)
+        .select(trackColumns())
         .eq('artist_id', artistId)
         .order('title', { ascending: true })
         .limit(limit);
@@ -279,7 +287,7 @@ class MusicLibraryService {
       const [tracks, albums, artists] = await Promise.all([
         this.client
           .from('tracks')
-          .select(TRACK_COLUMNS)
+          .select(trackColumns())
           .ilike('title', pattern)
           .order('title')
           .limit(limitPerType),
@@ -350,7 +358,7 @@ class MusicLibraryService {
     try {
       const { data, error } = await this.client
         .from('playlist_tracks')
-        .select(`id, playlist_id, track_id, position, added_at, track:tracks ( ${TRACK_COLUMNS} )`)
+        .select(`id, playlist_id, track_id, position, added_at, track:tracks ( ${trackColumns()} )`)
         .eq('playlist_id', playlistId)
         .order('position', { ascending: true });
       if (error) throw error;
@@ -624,6 +632,8 @@ class MusicLibraryService {
       artist_id?: string | null;
       /** Moving one song to a different album. */
       album_id?: string | null;
+      /** Artwork for this song alone; needs 0004_track_artwork.sql. */
+      cover_path?: string | null;
       track_no?: number | null;
       disc_no?: number | null;
       year?: number | null;

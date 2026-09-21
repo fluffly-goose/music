@@ -34,6 +34,8 @@ export interface Track {
   disc_no: number | null;
   duration_seconds: number | null;
   audio_path: string;
+  /** Artwork for this song specifically; null means inherit the album's. */
+  cover_path?: string | null;
   mime_type: string | null;
   file_size: number | null;
   genre: string | null;
@@ -83,7 +85,11 @@ export interface Artwork {
 }
 
 export function trackArtwork(track: Track): Artwork {
-  return { path: track.album?.cover_path ?? null, seed: track.album?.title ?? track.title };
+  // A song's own cover wins; otherwise it borrows the album's.
+  return {
+    path: track.cover_path ?? track.album?.cover_path ?? null,
+    seed: track.album?.title ?? track.title,
+  };
 }
 
 /** Display artist for a track, falling back through album then "Unknown". */

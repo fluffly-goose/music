@@ -65,6 +65,7 @@ Open your project's **SQL Editor** and run these three files in order:
 | `supabase/migrations/0001_schema.sql` | Tables, indexes, triggers |
 | `supabase/migrations/0002_rls.sql` | Row Level Security policies |
 | `supabase/migrations/0003_storage.sql` | Creates the private `music` bucket and its policies |
+| `supabase/migrations/0004_track_artwork.sql` | Optional: lets a song carry its own cover |
 
 ### 2. Create your user
 
@@ -148,13 +149,24 @@ It walks the folder recursively and is safe to re-run. Unlike the in-app
 uploader it uses the service-role key, so it runs **on your machine only** —
 which is why `.env` is gitignored and never bundled into the site.
 
+### Artwork
+
+A song shows its own cover if it has one, and borrows its album's otherwise.
+Set either from the pencil on the album screen, or from **…** → *Edit details*
+on any song.
+
+Per-song covers need `0004_track_artwork.sql`. The app checks whether that
+column exists and keeps working without it — you simply will not see the
+artwork picker on a song until you run it.
+
 ### Fixing details after the fact
 
 Tags are often wrong, and nothing here is permanent:
 
 - **A song** — the **…** menu on any row → *Edit details*. Title, **artist**,
-  **album**, track and disc number, year, genre. Changing the artist or album
-  moves that one song. Delete removes the row and its audio file.
+  **album**, **cover art**, track and disc number, year, genre. Changing the
+  artist or album moves that one song. Delete removes the row, its audio file
+  and any artwork belonging to it alone.
 - **An album** — the pencil on the album screen. Title, artist, year, genre and
   the cover art. Changing the artist moves the album **and every song on it**,
   which is the efficient fix when a whole import landed under the wrong name.
@@ -207,6 +219,7 @@ src/lib/
 │   └── mediaSession.ts  lock-screen metadata
 ├── state/store.ts     ~40-line observable store
 └── ui/                rendering, bound to the stores above
+    ├── logo.ts          the Resonance mark and wordmark, drawn as SVG
     ├── edit-sheet.ts    the modal form sheet every edit flow uses
     └── edit-actions.ts  track / album / artist edit + delete flows
 ```
@@ -243,6 +256,17 @@ split also removes a race — several tracks from one album processed in
 parallel would otherwise each try to create that album. Per file the order is
 upload-then-insert, and a failed insert deletes the uploaded object again so a
 broken import cannot leave orphaned audio in the bucket.
+
+**Optional migrations are detected, not assumed.** Migrations ship after
+people already have a running database, so the connection probes for each
+addition once and the query layer adapts. Asking PostgREST for a column that
+does not exist fails the whole query, so without this an un-migrated database
+would lose its library rather than lose one feature.
+
+**The theme is re-applied after every navigation.** Astro's ClientRouter
+copies the incoming page's `<html>` attributes over the live ones, and every
+page ships the default theme in its static markup — so a preference set in
+Settings silently reverted as soon as you moved between screens.
 
 **The 1 MB tag parser is loaded on demand.** It only ever runs on the import
 screen, so it is dynamically imported rather than shipped in the main bundle.
@@ -430,6 +454,7 @@ npm test
 | Import | tag reading, filename fallbacks, de-duplication, rollback, cancellation |
 | Connection status | telling "signed out behind RLS" apart from "an empty library" |
 | Editing | partial patches, moving songs, album-wide artist cascade, duplicate clashes, delete cleanup |
+| Schema features | the track column list adapting to whether 0004 has been applied |
 | Errors | every Supabase failure mode maps to actionable advice |
 
 ### Browser tests
@@ -440,7 +465,7 @@ npm run test:all        # unit -> build -> browser
 
 `tests/e2e/` drives the real built app in headless Chromium at a 393x852
 iPhone viewport against a mocked Supabase project that serves real audio and
-real artwork. 151 checks across seven suites:
+real artwork. 198 checks across eight suites:
 
 | Suite | Covers |
 |---|---|
@@ -450,7 +475,8 @@ real artwork. 151 checks across seven suites:
 | `gate-fields.mjs` | A restored config repopulates the form; typing survives a failed connect |
 | `upload.mjs` | Picking files, reading tags in-browser, the review step, uploading to Storage, owner-prefixed keys, entity reuse |
 | `signed-out.mjs` | Signed out behind RLS prompts for sign-in; Settings offers it; an anonymously-readable library is not nagged |
-| `editing.mjs` | Editing songs, albums and artists; moving one song; an album's artist cascading to its songs; validation; artwork upload; delete |
+| `editing.mjs` | Editing songs, albums and artists; moving one song; an album's artist cascading to its songs; validation; artwork upload; working without migration 0004; delete |
+| `appearance.mjs` | Theme surviving navigation and reload; the Resonance lockup on Home; shared header geometry; the search field's icon |
 
 Playwright needs a browser once: `npx playwright install chromium`. If your
 environment already ships one, point at it with `PLAYWRIGHT_EXECUTABLE_PATH`.

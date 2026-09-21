@@ -111,14 +111,14 @@ import AppLayout from '../layouts/AppLayout.astro';
 
     await definePage({
       root,
-      skeleton: `<header class="px-4 pt-5 pb-3 flex items-center justify-between">
-                   <h1 class="text-[30px] font-bold tracking-tight">Library</h1>
+      skeleton: `<header class="page-header">
+                   <h1 class="page-title">Library</h1>
                    <a href="/upload" class="icon-button" aria-label="Add music" style="color:var(--accent)">${icons.plus(20)}</a>
                  </header>
                  ${tabBar(tab)}${skeletonRows(8)}`,
       load: async () => `
-        <header class="px-4 pt-5 pb-3 flex items-center justify-between">
-          <h1 class="text-[30px] font-bold tracking-tight">Library</h1>
+        <header class="page-header">
+          <h1 class="page-title">Library</h1>
           <a href="/upload" class="icon-button" aria-label="Add music" style="color:var(--accent)">
             ${icons.plus(20)}
           </a>

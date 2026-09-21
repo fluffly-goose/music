@@ -25,12 +25,12 @@ import AppLayout from '../layouts/AppLayout.astro';
     root.dataset.pageInit = '1';
 
     root.innerHTML = `
-      <header class="px-4 pt-5 pb-3">
-        <h1 class="text-[30px] font-bold tracking-tight mb-4">Search</h1>
+      <header class="page-header page-header-stack">
+        <h1 class="page-title mb-4">Search</h1>
         <div class="relative">
-          <span class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+          <span class="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
                 style="color:var(--subtle)">${icons.search(18)}</span>
-          <input id="search-input" class="field pl-10" type="search" enterkeyhint="search"
+          <input id="search-input" class="field field-icon" type="search" enterkeyhint="search"
                  autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"
                  placeholder="Songs, albums and artists" aria-label="Search your library">
         </div>

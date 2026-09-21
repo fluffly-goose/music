@@ -238,6 +238,82 @@ check('saving renames the artist', artistPatch?.patch?.name === 'Aurora Fields')
     String(coverPatch?.patch?.cover_path ?? '(none)'));
 }
 
+/* ----------------------------------------------------- per-song artwork */
+{
+  const uploaded = [];
+  updated.length = 0;
+  await installMock(page, { updated, inserted, deleted, uploaded });
+
+  await page.goto(`${BASE}/album?id=al2`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(1200);
+  await page.locator('[data-track-menu]').nth(1).click();
+  await page.waitForTimeout(700);
+  await page.locator('#action-panel button', { hasText: 'Edit details' }).click();
+  await page.waitForSelector('.modal.is-open', { timeout: 10000 });
+
+  check('a song can be given its own artwork', await page.locator('[data-art-picker]').count() === 1);
+  await page.locator('[data-art-input]').setInputFiles({
+    name: 'song.png', mimeType: 'image/png',
+    buffer: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64'),
+  });
+  await page.waitForTimeout(500);
+  await page.click('[data-save]');
+  await page.waitForTimeout(2000);
+
+  const coverUpload = uploaded.find((k) => k.includes('/tracks/'));
+  check('song artwork is stored under the song, not the album', Boolean(coverUpload),
+    coverUpload ?? '(none)');
+  check('and the key is owner-prefixed for the Storage policy',
+    Boolean(coverUpload?.startsWith('11111111-1111-4111-8111-111111111111/')));
+
+  const patch = updated.find((u) => u.table === 'tracks' && u.filters?.id);
+  check('the song row points at its own cover',
+    typeof patch?.patch?.cover_path === 'string' && patch.patch.cover_path.includes('/tracks/'),
+    String(patch?.patch?.cover_path ?? '(none)'));
+}
+
+/* ------------------- a database without 0004 must still work, just without it */
+{
+  const older = await context.browser().newContext({ viewport: { width: 393, height: 852 } });
+  const p2 = await older.newPage();
+  const oops = [];
+  p2.on('pageerror', (e) => oops.push(e.message));
+  await installMock(p2);
+  // Simulate the column not existing yet.
+  await p2.route('**/rest/v1/tracks*', async (route) => {
+    const url = new URL(route.request().url());
+    if ((url.searchParams.get('select') ?? '') === 'cover_path') {
+      return route.fulfill({
+        status: 400, contentType: 'application/json',
+        headers: { 'access-control-allow-origin': '*' },
+        body: JSON.stringify({ code: '42703', message: 'column tracks.cover_path does not exist' }),
+      });
+    }
+    return route.fallback();
+  });
+  await seedConnection(p2);
+
+  await p2.goto(`${BASE}/album?id=al1`, { waitUntil: 'networkidle' });
+  await p2.waitForTimeout(1500);
+  check('the library still loads without migration 0004',
+    (await p2.locator('.track-row').count()) > 0,
+    `${await p2.locator('.track-row').count()} rows`);
+
+  await p2.locator('[data-track-menu]').first().click();
+  await p2.waitForTimeout(700);
+  await p2.locator('#action-panel button', { hasText: 'Edit details' }).click();
+  await p2.waitForSelector('.modal.is-open', { timeout: 10000 });
+  check('the song sheet still opens, just without the artwork picker',
+    (await p2.locator('[data-art-picker]').count()) === 0);
+  check('and it says how to enable it',
+    /migration 0004/i.test(await p2.locator('.modal.is-open .modal-panel').textContent() ?? ''));
+  check('no crash from the missing column', oops.length === 0, oops.join('; '));
+  await p2.screenshot({ path: `${SHOTS}40-no-migration-0004.png` });
+  await older.close();
+}
+
 /* ---------------------------------------------------------------- delete */
 await page.goto(`${BASE}/album?id=al2`, { waitUntil: 'networkidle' });
 await page.waitForTimeout(1200);
